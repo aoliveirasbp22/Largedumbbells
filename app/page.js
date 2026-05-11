@@ -52,44 +52,70 @@ export default function Home() {
   const filteredLeads = filter === 'all' ? leads : leads.filter(l => l.status === filter)
 
   const statusColors = {
-    new: 'bg-blue-100 text-blue-700',
-    responded: 'bg-yellow-100 text-yellow-700',
-    qualified: 'bg-purple-100 text-purple-700',
-    booked: 'bg-green-100 text-green-700'
+    new: 'bg-blue-500/20 text-blue-300',
+    qualifying: 'bg-yellow-500/20 text-yellow-300',
+    disqualified: 'bg-red-500/20 text-red-300',
+    booked: 'bg-green-500/20 text-green-300',
+    'link sent': 'bg-purple-500/20 text-purple-300'
   }
 
+  const DumbbellIcon = ({ size = 28, opacity = 1 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ opacity }}>
+      <rect x="2" y="10" width="3" height="4" rx="1" fill="#B8935A"/>
+      <rect x="19" y="10" width="3" height="4" rx="1" fill="#B8935A"/>
+      <rect x="5" y="8" width="2" height="8" rx="1" fill="#B8935A"/>
+      <rect x="17" y="8" width="2" height="8" rx="1" fill="#B8935A"/>
+      <rect x="7" y="11" width="10" height="2" rx="1" fill="#B8935A"/>
+    </svg>
+  )
+
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
+    <div className="flex h-screen font-sans" style={{ background: '#0a0a0a' }}>
+
       {/* Sidebar */}
-      <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <h1 className="font-semibold text-gray-900 mb-3">Leads inbox</h1>
-          <div className="flex gap-1 flex-wrap">
-            {['all', 'new', 'responded', 'qualified', 'booked'].map(f => (
+      <div className="w-72 flex flex-col border-r" style={{ background: '#111111', borderColor: '#222' }}>
+        <div className="p-4 border-b" style={{ borderColor: '#222' }}>
+          <p className="text-xs mb-3 font-semibold tracking-widest" style={{ color: '#555' }}>FILTER</p>
+          <div className="flex flex-wrap gap-1">
+            {['all', 'new', 'link sent', 'qualifying', 'disqualified', 'booked'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`px-2 py-1 rounded-full text-xs font-medium ${filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                className="px-2 py-1 rounded text-xs font-medium transition-all"
+                style={{
+                  background: filter === f ? '#B8935A' : '#1a1a1a',
+                  color: filter === f ? '#000' : '#888',
+                  border: '1px solid',
+                  borderColor: filter === f ? '#B8935A' : '#333'
+                }}>
                 {f}
               </button>
             ))}
           </div>
         </div>
+
         <div className="flex-1 overflow-y-auto">
           {filteredLeads.length === 0 && (
-            <p className="text-sm text-gray-400 p-4">No leads yet</p>
+            <p className="text-xs p-4" style={{ color: '#555' }}>No leads yet</p>
           )}
           {filteredLeads.map(lead => (
             <div key={lead.id} onClick={() => selectLead(lead)}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${selectedLead?.id === lead.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''}`}>
+              className="p-3 cursor-pointer transition-all border-b"
+              style={{
+                borderColor: '#1a1a1a',
+                background: selectedLead?.id === lead.id ? '#1a1a1a' : 'transparent',
+                borderLeft: selectedLead?.id === lead.id ? '2px solid #B8935A' : '2px solid transparent'
+              }}>
               <div className="flex justify-between items-start mb-1">
-                <span className="font-medium text-sm text-gray-900">{lead.name || lead.ig_handle}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[lead.status] || 'bg-gray-100 text-gray-600'}`}>
+                <span className="font-medium text-sm" style={{ color: '#e0e0e0' }}>
+                  {lead.name || lead.ig_handle}
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[lead.status] || 'bg-gray-500/20 text-gray-400'}`}>
                   {lead.status}
                 </span>
               </div>
               {lead.roadblock && (
-                <p className="text-xs text-gray-500 line-clamp-2">{lead.roadblock}</p>
+                <p className="text-xs line-clamp-2" style={{ color: '#666' }}>{lead.roadblock}</p>
               )}
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs mt-1" style={{ color: '#444' }}>
                 {new Date(lead.created_at).toLocaleDateString()}
               </p>
             </div>
@@ -98,34 +124,57 @@ export default function Home() {
       </div>
 
       {/* Main panel */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* Brand header — centered */}
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ background: '#111', borderColor: '#222' }}>
+          <div className="flex-1 flex items-center justify-center gap-3">
+            <DumbbellIcon size={32} />
+            <div className="text-center">
+              <h1 className="font-bold tracking-widest text-lg" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
+              <p className="text-xs" style={{ color: '#444' }}>Leads Dashboard</p>
+            </div>
+            <DumbbellIcon size={32} />
+          </div>
+          {selectedLead && (
+            <select value={selectedLead.status}
+              onChange={e => { updateStatus(selectedLead.id, e.target.value); setSelectedLead({...selectedLead, status: e.target.value}) }}
+              className="text-xs px-3 py-1.5 rounded ml-4"
+              style={{ background: '#1a1a1a', color: '#B8935A', border: '1px solid #B8935A44' }}>
+              <option value="new">new</option>
+              <option value="link sent">link sent</option>
+              <option value="qualifying">qualifying</option>
+              <option value="disqualified">disqualified</option>
+              <option value="booked">booked</option>
+            </select>
+          )}
+        </div>
+
         {!selectedLead ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            <p>Select a lead to view the conversation</p>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <DumbbellIcon size={48} opacity={0.15} />
+            <p className="text-sm" style={{ color: '#444' }}>Select a lead to view the conversation</p>
           </div>
         ) : (
           <>
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold text-gray-900">{selectedLead.name || selectedLead.ig_handle}</h2>
-                <p className="text-sm text-gray-500">{selectedLead.platform}</p>
+            {/* Lead info bar */}
+            <div className="px-6 py-3 border-b flex items-center gap-3" style={{ background: '#0f0f0f', borderColor: '#1a1a1a' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                style={{ background: '#B8935A22', color: '#B8935A', border: '1px solid #B8935A44' }}>
+                {(selectedLead.name || selectedLead.ig_handle || '?')[0].toUpperCase()}
               </div>
-              <select value={selectedLead.status}
-                onChange={e => { updateStatus(selectedLead.id, e.target.value); setSelectedLead({...selectedLead, status: e.target.value}) }}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
-                <option value="new">new</option>
-                <option value="responded">responded</option>
-                <option value="qualified">qualified</option>
-                <option value="booked">booked</option>
-              </select>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: '#e0e0e0' }}>{selectedLead.name || selectedLead.ig_handle}</p>
+                <p className="text-xs" style={{ color: '#555' }}>{selectedLead.platform}</p>
+              </div>
             </div>
 
             {/* Roadblock banner */}
             {selectedLead.roadblock && (
-              <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-xs font-semibold text-amber-700 uppercase mb-1">Their biggest struggle</p>
-                <p className="text-sm text-amber-900">{selectedLead.roadblock}</p>
+              <div className="mx-4 mt-4 p-3 rounded-lg"
+                style={{ background: '#B8935A11', border: '1px solid #B8935A33' }}>
+                <p className="text-xs font-bold mb-1 tracking-wider" style={{ color: '#B8935A' }}>THEIR BIGGEST STRUGGLE</p>
+                <p className="text-sm" style={{ color: '#ccc' }}>{selectedLead.roadblock}</p>
               </div>
             )}
 
@@ -133,26 +182,33 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
               {messages.map(msg => (
                 <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs px-4 py-2 rounded-2xl text-sm ${msg.direction === 'outbound' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-900'}`}>
+                  <div className="max-w-xs px-4 py-2 text-sm"
+                    style={{
+                      background: msg.direction === 'outbound' ? '#B8935A' : '#1a1a1a',
+                      color: msg.direction === 'outbound' ? '#000' : '#ccc',
+                      borderRadius: msg.direction === 'outbound' ? '14px 4px 14px 14px' : '4px 14px 14px 14px'
+                    }}>
                     {msg.content}
                   </div>
                 </div>
               ))}
               {messages.length === 0 && (
-                <p className="text-sm text-gray-400 text-center mt-8">No messages yet</p>
+                <p className="text-xs text-center mt-8" style={{ color: '#444' }}>No messages yet</p>
               )}
             </div>
 
             {/* Reply box */}
-            <div className="bg-white border-t border-gray-200 p-4 flex gap-3">
+            <div className="p-4 border-t flex gap-3" style={{ background: '#111', borderColor: '#222' }}>
               <textarea value={reply} onChange={e => setReply(e.target.value)}
                 placeholder="Type your reply..."
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-400"
+                className="flex-1 text-sm resize-none rounded-lg px-3 py-2 focus:outline-none"
+                style={{ background: '#1a1a1a', color: '#e0e0e0', border: '1px solid #333' }}
                 rows={2}
                 onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendReply() }}
               />
               <button onClick={sendReply}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                className="px-4 py-2 rounded-lg text-sm font-bold transition-all hover:opacity-90"
+                style={{ background: '#B8935A', color: '#000' }}>
                 Send
               </button>
             </div>
