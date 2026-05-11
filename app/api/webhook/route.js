@@ -2,9 +2,9 @@ import { supabase } from '@/lib/supabase'
 
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN
 const PAGE_ACCESS_TOKEN = process.env.META_PAGE_ACCESS_TOKEN
-const TRIGGER_WORD = 'GUIDE'
+const TRIGGER_WORD = 'simple'
+const BLUEPRINT_LINK = 'https://api.leadconnectorhq.com/widget/form/nyKDoOCsbzV2kwTLIS0h?notrack=true'
 
-// Meta webhook verification
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
   const mode = searchParams.get('hub.mode')
@@ -17,25 +17,28 @@ export async function GET(request) {
   return new Response('Forbidden', { status: 403 })
 }
 
-// Receive webhook events
 export async function POST(request) {
   const body = await request.json()
 
   if (body.object === 'page' || body.object === 'instagram') {
     for (const entry of body.entry) {
-      // Handle comments
       if (entry.changes) {
         for (const change of entry.changes) {
           if (change.field === 'comments') {
             const comment = change.value
             const commentText = comment.message?.toLowerCase() || ''
-            if (commentText.includes(TRIGGER_WORD.toLowerCase())) {
-              await handleTrigger(comment.from.id, comment.from.name, 'comment')
+            if (commentText.includes(TRIGGER_WORD)) {
+              await handleTrigger(comment.from.id, comment.from.name, 'facebook')
+            }
+          }
+          if (change.field === 'messages') {
+            const msg = change.value
+            if (msg && !msg.is_echo) {
+              await handleIncomingDM(msg)
             }
           }
         }
       }
-      // Handle DMs
       if (entry.messaging) {
         for (const msg of entry.messaging) {
           if (msg.message && !msg.message.is_echo) {
@@ -49,8 +52,7 @@ export async function POST(request) {
   return new Response('OK', { status: 200 })
 }
 
-async function handleTrigger(psid, name, source) {
-  // Check if lead already exists
+async function handleTrigger(psid, name, platform) {
   const { data: existing } = await supabase
     .from('leads')
     .select('id')
@@ -58,25 +60,30 @@ async function handleTrigger(psid, name, source) {
     .single()
 
   if (!existing) {
-    // Save new lead
     await supabase.from('leads').insert({
       psid,
       name,
       ig_handle: name,
       status: 'new',
-      platform: source
+      platform
     })
 
-    // Send auto DM
-    await sendDM(psid, `Hey! Here's your free blueprint 👇\n[YOUR LINK HERE]\n\nWhile you look through it — what's been your biggest struggle up to this point?`)
+    // First message — blueprint link
+    await sendDM(psid, `Hey there, here is the blueprint you requested 👇\n${BLUEPRINT_LINK}`)
+
+    // Small delay then second message
+    await delay(2000)
+
+    // Second message — opening question
+    await sendDM(psid, `As you look that over, what is currently your biggest struggle with fitness?`)
   }
 }
 
 async function handleIncomingDM(msg) {
   const psid = msg.sender.id
-  const text = msg.message.text
+  const text = msg.message?.text
+  if (!text) return
 
-  // Update lead status and save roadblock
   const { data: lead } = await supabase
     .from('leads')
     .select('id, status')
@@ -84,11 +91,17 @@ async function handleIncomingDM(msg) {
     .single()
 
   if (lead) {
-    await supabase.from('leads').update({
-      status: 'responded',
-      roadblock: text,
+    const updates = {
       updated_at: new Date().toISOString()
-    }).eq('id', lead.id)
+    }
+
+    // Save first reply as their roadblock
+    if (lead.status === 'new') {
+      updates.roadblock = text
+      updates.status = 'qualifying'
+    }
+
+    await supabase.from('leads').update(updates).eq('id', lead.id)
 
     await supabase.from('messages').insert({
       lead_id: lead.id,
@@ -99,7 +112,7 @@ async function handleIncomingDM(msg) {
 }
 
 async function sendDM(psid, message) {
-  await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+  const res = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -107,4 +120,9 @@ async function sendDM(psid, message) {
       message: { text: message }
     })
   })
+  return res
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
