@@ -406,6 +406,7 @@ export default function Calls() {
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({})
   const [loading, setLoading] = useState(true)
+  const [hydrated, setHydrated] = useState(false)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('created')
   const [timeframe, setTimeframe] = useState('daily')
@@ -416,6 +417,26 @@ export default function Calls() {
   const [filters, setFilters] = useState({
     country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [],
   })
+
+  // ─── Hydrate from localStorage ONCE on mount ────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('callsListState')
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (state.search !== undefined) setSearch(state.search)
+        if (state.sortBy)               setSortBy(state.sortBy)
+        if (state.timeframe)            setTimeframe(state.timeframe)
+        if (state.perPage)              setPerPage(state.perPage)
+        if (state.page)                 setPage(state.page)
+        if (state.filters)              setFilters(state.filters)
+        if (state.selectedRow)          setSelectedRow(state.selectedRow)
+      }
+    } catch (err) {
+      console.error('Restore error:', err)
+    }
+    setHydrated(true)
+  }, [])
   const [openFilter, setOpenFilter] = useState(null)
 
   function toggleFilterValue(column, value) {
@@ -438,24 +459,17 @@ export default function Calls() {
 
   useEffect(() => { fetchData() }, [])
 
-  // ─── Restore state when navigating back from a profile ────────────
+ // ─── Save state on every change (but only AFTER hydration) ────────────
   useEffect(() => {
+    if (!hydrated) return
     try {
-      const saved = sessionStorage.getItem('callsListState')
-      if (!saved) return
-      const state = JSON.parse(saved)
-      if (state.search !== undefined)    setSearch(state.search)
-      if (state.sortBy)                  setSortBy(state.sortBy)
-      if (state.timeframe)               setTimeframe(state.timeframe)
-      if (state.perPage)                 setPerPage(state.perPage)
-      if (state.page)                    setPage(state.page)
-      if (state.filters)                 setFilters(state.filters)
-      if (state.selectedRow)             setSelectedRow(state.selectedRow)
-      sessionStorage.removeItem('callsListState')
+      localStorage.setItem('callsListState', JSON.stringify({
+        search, sortBy, timeframe, perPage, page, filters, selectedRow,
+      }))
     } catch (err) {
-      console.error('State restore error:', err)
+      console.error('State save error:', err)
     }
-  }, [])
+  }, [hydrated, search, sortBy, timeframe, perPage, page, filters, selectedRow])
 
   // ─── Scroll to highlighted row when restored ──────────────────────
   useEffect(() => {
@@ -505,11 +519,15 @@ export default function Calls() {
     setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], tag, last_contacted: now } }))
   }
 
-  function saveListState(contactId) {
-    sessionStorage.setItem('callsListState', JSON.stringify({
-      search, sortBy, timeframe, perPage, page, filters,
-      selectedRow: contactId,
-    }))
+ function saveListState(contactId) {
+    // Update selectedRow in storage so when we come back, that row is highlighted
+    try {
+      const current = JSON.parse(localStorage.getItem('callsListState') || '{}')
+      localStorage.setItem('callsListState', JSON.stringify({
+        ...current,
+        selectedRow: contactId,
+      }))
+    } catch {}
   }
 
   const tagColors = {
@@ -595,10 +613,10 @@ export default function Calls() {
       return 0
     })
 
-  const statTotal = timeframeContacts.length
-  const statCalled = timeframeContacts.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
-  const statAnswered = timeframeContacts.filter(c => answeredTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
-  const statBooked = timeframeContacts.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
+  const statTotal = filtered.length
+  const statCalled = filtered.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
+  const statAnswered = filtered.filter(c => answeredTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
+  const statBooked = filtered.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
 
   const totalPages = Math.ceil(filtered.length / perPage)
   const paginated = filtered.slice((page - 1) * perPage, page * perPage)

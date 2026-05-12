@@ -134,6 +134,46 @@ export default function DMInbox() {
 
   useEffect(() => { fetchLeads() }, [])
 
+
+  // ─── Restore state on mount ────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('inboxState')
+      if (!saved) return
+      const state = JSON.parse(saved)
+      if (state.search !== undefined) setSearch(state.search)
+      if (state.filter)               setFilter(state.filter)
+      if (state.timeframe)            setTimeframe(state.timeframe)
+      if (state.selectedLeadId)       {
+        // Will be applied once leads load
+        window.__pendingSelectedLeadId = state.selectedLeadId
+      }
+    } catch (err) {
+      console.error('Inbox state restore error:', err)
+    }
+  }, [])
+
+  // ─── Apply pending selected lead once leads load ────────────
+  useEffect(() => {
+    if (leads.length > 0 && window.__pendingSelectedLeadId) {
+      const lead = leads.find(l => l.id === window.__pendingSelectedLeadId)
+      if (lead) setSelectedLead(lead)
+      window.__pendingSelectedLeadId = null
+    }
+  }, [leads])
+
+  // ─── Save state on every change ────────────
+  useEffect(() => {
+    try {
+      localStorage.setItem('inboxState', JSON.stringify({
+        search, filter, timeframe,
+        selectedLeadId: selectedLead?.id || null,
+      }))
+    } catch (err) {
+      console.error('Inbox state save error:', err)
+    }
+  }, [search, filter, timeframe, selectedLead])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [leadMessages, selectedLead])
