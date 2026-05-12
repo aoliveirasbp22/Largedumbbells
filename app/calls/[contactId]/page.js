@@ -191,25 +191,33 @@ export default function ContactProfile() {
         background: '#111',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div>
+
+        {/* Left: Back button */}
+        <Link href="/calls"
+          style={{
+            background: '#1a1a1a', color: '#B8935A',
+            border: '1px solid #B8935A44', padding: '6px 12px',
+            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+          }}>← Back to Outreach Pipeline</Link>
+
+        {/* Center: Brand */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
             LARGE DUMBBELLS
           </h1>
-          <p style={{ fontSize: 12, color: '#444' }}>Call List / {fullName}</p>
+          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
+            CONTACT PROFILE
+          </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+        {/* Right: save status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200, justifyContent: 'flex-end' }}>
           {saving && <span style={{ fontSize: 12, color: '#555' }}>Saving…</span>}
           {!saving && lastSaved && (
             <span style={{ fontSize: 12, color: '#555' }}>
               Saved {lastSaved.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <Link href="/calls"
-            style={{
-              background: '#1a1a1a', color: '#B8935A',
-              border: '1px solid #B8935A44', padding: '6px 12px',
-              borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-            }}>← Back to call list</Link>
         </div>
       </div>
 

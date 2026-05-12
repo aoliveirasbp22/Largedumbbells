@@ -92,11 +92,31 @@ export default function EmailAutomation() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0a', fontFamily: 'sans-serif' }}>
-      <div style={{ borderBottom: '1px solid #222', padding: '16px 32px', background: '#111' }}>
-        <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
-          LARGE DUMBBELLS
-        </h1>
-        <p style={{ fontSize: 12, color: '#444' }}>Email Automation</p>
+      <div style={{
+        borderBottom: '1px solid #222', padding: '16px 32px', background: '#111',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+
+        {/* Left: Back to Outreach */}
+        <Link href="/calls"
+          style={{
+            background: '#1a1a1a', color: '#B8935A',
+            border: '1px solid #B8935A44', padding: '6px 12px',
+            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+          }}>← Back to Outreach Pipeline</Link>
+
+        {/* Center: Brand */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
+            LARGE DUMBBELLS
+          </h1>
+          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
+            EMAIL AUTOMATION
+          </p>
+        </div>
+
+        {/* Right: spacer */}
+        <div style={{ width: 180 }} />
       </div>
 
       <div style={{ padding: '24px 32px', maxWidth: 1280, margin: '0 auto' }}>

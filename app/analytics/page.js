@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -155,15 +156,30 @@ export default function Analytics() {
     <div className="min-h-screen font-sans" style={{ background: '#0a0a0a' }}>
 
       {/* Header */}
-      <div className="border-b px-8 py-4 flex items-center"
+      <div className="border-b px-8 py-4 flex items-center justify-between"
         style={{ background: '#111', borderColor: '#222' }}>
-        <div className="flex items-center gap-3">
-          <DumbbellIcon size={28} />
-          <div>
+
+        {/* Left: Back to DM Pipeline */}
+        <Link href="/inbox"
+          style={{
+            background: '#1a1a1a', color: '#B8935A',
+            border: '1px solid #B8935A44', padding: '6px 12px',
+            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+          }}>← Back to DM Pipeline</Link>
+
+        {/* Center: Brand */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-3">
+            <DumbbellIcon size={28} />
             <h1 className="font-bold tracking-widest text-lg" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
-            <p className="text-xs" style={{ color: '#444' }}>DM Analytics</p>
           </div>
+          <p className="text-xs font-medium tracking-wider" style={{ color: '#fff' }}>
+            DM ANALYTICS
+          </p>
         </div>
+
+        {/* Right: spacer to keep brand centered */}
+        <div style={{ width: 170 }} />
       </div>
 
       <div className="px-8 py-6 max-w-6xl mx-auto">

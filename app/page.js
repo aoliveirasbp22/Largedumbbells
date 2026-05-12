@@ -3,31 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getStartDate(timeframe) {
-  const d = new Date()
-  if (timeframe === 'daily')   { d.setHours(0, 0, 0, 0); return d }
-  if (timeframe === 'weekly')  { d.setDate(d.getDate() - 7); return d }
-  if (timeframe === 'monthly') { d.setDate(d.getDate() - 30); return d }
-  return new Date(0)
-}
-
-function timeAgo(dateStr) {
-  if (!dateStr) return ''
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  const hrs  = Math.floor(mins / 60)
-  const days = Math.floor(hrs / 24)
-  if (mins < 1)  return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (hrs  < 24) return `${hrs}hr ago`
-  return `${days}d ago`
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const DumbbellIcon = ({ size = 28 }) => (
+const DumbbellIcon = ({ size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <rect x="2"  y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
     <rect x="19" y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
@@ -37,244 +13,658 @@ const DumbbellIcon = ({ size = 28 }) => (
   </svg>
 )
 
-const TimeframePicker = ({ value, onChange }) => (
-  <div className="flex gap-1">
-    {['daily', 'weekly', 'monthly'].map(t => (
-      <button key={t} onClick={() => onChange(t)}
-        className="text-xs px-2 py-1 rounded"
-        style={{
-          background:  value === t ? '#B8935A' : '#1a1a1a',
-          color:       value === t ? '#000' : '#555',
-          border:      '1px solid',
-          borderColor: value === t ? '#B8935A' : '#222',
-        }}>
-        {t}
-      </button>
-    ))}
-  </div>
+const ChatIcon = ({ size = 22, color = '#B8935A' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
 )
 
-function StatCard({ label, value, color }) {
+const PhoneIcon = ({ size = 22, color = '#B8935A' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.29 6.29l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const FIELD_IDS = {
+  struggle: 'WtsEP55kDKmuYvjR3cRM',
+  bothered: 'b9izCUDE2DcOqViZ6Da4',
+  age:      'gvlEzRdj7FhoOw6Yk0p6',
+  invest:   'xLhl7frOJAopwN0r94gX',
+}
+
+// ─── Timezone helpers (slim version - just for checking green window) ───
+const COUNTRY_TIMEZONES = {
+  '1876':'America/Jamaica','1868':'America/Port_of_Spain','1246':'America/Barbados',
+  '213':'Africa/Algiers','216':'Africa/Tunis','218':'Africa/Tripoli',
+  '20':'Africa/Cairo','27':'Africa/Johannesburg','30':'Europe/Athens',
+  '31':'Europe/Amsterdam','32':'Europe/Brussels','33':'Europe/Paris',
+  '34':'Europe/Madrid','36':'Europe/Budapest','39':'Europe/Rome',
+  '40':'Europe/Bucharest','41':'Europe/Zurich','43':'Europe/Vienna',
+  '44':'Europe/London','45':'Europe/Copenhagen','46':'Europe/Stockholm',
+  '47':'Europe/Oslo','48':'Europe/Warsaw','49':'Europe/Berlin',
+  '52':'America/Mexico_City','55':'America/Sao_Paulo','61':'Australia/Sydney',
+  '64':'Pacific/Auckland','7':'Europe/Moscow','81':'Asia/Tokyo',
+  '86':'Asia/Shanghai','91':'Asia/Kolkata',
+}
+
+function isInGreenWindow(phone) {
+  if (!phone) return false
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return false
+
+  let tz = COUNTRY_TIMEZONES[digits.slice(0, 4)]
+    || COUNTRY_TIMEZONES[digits.slice(0, 3)]
+    || COUNTRY_TIMEZONES[digits.slice(0, 2)]
+  if (!tz && digits.startsWith('1')) tz = 'America/New_York'
+  if (!tz) return false
+
+  try {
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: 'numeric', minute: '2-digit',
+      hour12: true, weekday: 'short',
+    }).formatToParts(now)
+    const get = type => parts.find(p => p.type === type)?.value || ''
+    const weekday = get('weekday')
+    const isWeekend = weekday === 'Sat' || weekday === 'Sun'
+    const h12 = parseInt(get('hour'))
+    const m   = parseInt(get('minute'))
+    const ap  = get('dayPeriod')
+    let h24 = h12
+    if (ap === 'PM' && h12 !== 12) h24 = h12 + 12
+    if (ap === 'AM' && h12 === 12) h24 = 0
+    const total = h24 * 60 + m
+    const start = isWeekend ? 11 * 60 : 18 * 60
+    const end   = 20 * 60
+    return total >= start && total <= end
+  } catch { return false }
+}
+
+function getField(customFields, id) {
+  return customFields?.find(f => f.id === id)?.value || null
+}
+
+// ─── Mini line chart with x-axis labels ───────────────────────────────
+function MiniChart({ series, labels, height = 60 }) {
+  if (!series.length || !series[0].data.length) {
+    return (
+      <div style={{ height: height + 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ fontSize: 10, color: '#333' }}>No trend data yet</p>
+      </div>
+    )
+  }
+  const allValues = series.flatMap(s => s.data)
+  const max = Math.max(...allValues, 1)
+  const min = 0
+  const range = max - min || 1
+  const W = 100
+  const H = height
+
   return (
-    <div className="rounded-lg p-4" style={{ background: '#0d0d0d', border: '1px solid #222' }}>
-      <p className="text-xs mb-2" style={{ color: '#555' }}>{label}</p>
-      <p className="text-4xl font-bold" style={{ color }}>{value}</p>
+    <div>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+        style={{ overflow: 'visible' }}>
+        {series.map((s, idx) => {
+          if (s.data.length === 0) return null
+          const points = s.data.map((v, i) => {
+            const x = (i / (s.data.length - 1 || 1)) * W
+            const y = H - ((v - min) / range) * (H - 4) - 2
+            return `${x},${y}`
+          }).join(' ')
+          return (
+            <polyline key={idx}
+              points={points}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.9}
+              vectorEffect="non-scaling-stroke"
+            />
+          )
+        })}
+      </svg>
+      {/* X-axis labels */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        {labels.map((l, i) => (
+          <span key={i} style={{ fontSize: 9, color: '#555', fontWeight: 500 }}>
+            {l}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Pipeline card ───────────────────────────────────────────────────
+function PipelineCard({ title, icon: Icon, href, stats, series, labels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
+  return (
+    <div style={{
+      background: '#111',
+      border: '1px solid #1a1a1a',
+      borderRadius: 16,
+      padding: 28,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 20,
+      transition: 'border-color 0.2s',
+      height: '100%',
+    }}>
 
-const calledTags   = ['called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
-const answeredTags = ['call back', 'not interested', 'booked']
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 10,
+            background: '#B8935A18',
+            border: '1px solid #B8935A33',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <Icon size={22} />
+          </div>
+          <h3 style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>{title}</h3>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: '#666', fontWeight: 500 }}>
+            {rangeLabel}
+          </span>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {[
+              { key: 'daily',   label: 'D' },
+              { key: 'weekly',  label: 'W' },
+              { key: 'monthly', label: 'M' },
+            ].map(t => (
+              <button key={t.key}
+                onClick={() => setTimeframe(t.key)}
+                style={{
+                  background: timeframe === t.key ? '#B8935A' : 'transparent',
+                  color: timeframe === t.key ? '#000' : '#666',
+                  border: `1px solid ${timeframe === t.key ? '#B8935A' : '#333'}`,
+                  width: 28, height: 24, borderRadius: 6,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                }}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
 
+      {/* Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${stats.length}, 1fr)`,
+        gap: 12,
+      }}>
+        {stats.map(s => (
+          <div key={s.label}>
+            <p style={{ fontSize: 30, fontWeight: 700, color: s.color, lineHeight: 1 }}>
+              {s.value}
+            </p>
+            <p style={{
+              fontSize: 9, color: '#666',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+              fontWeight: 600, marginTop: 8,
+            }}>
+              {s.label}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Mini chart */}
+      <div>
+        <p style={{
+          fontSize: 9, color: '#444', marginBottom: 6,
+          textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600,
+        }}>Trend</p>
+        <MiniChart series={series} labels={labels} />
+      </div>
+
+      {/* List section */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <p style={{
+          fontSize: 9, color: '#444', marginBottom: 10,
+          textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600,
+        }}>{listTitle}</p>
+        {listItems.length === 0 ? (
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px dashed #222', borderRadius: 8, padding: 16,
+          }}>
+            <p style={{ fontSize: 11, color: '#444', fontStyle: 'italic' }}>{emptyText}</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {listItems.slice(0, 3).map((item, i) => renderListItem(item, i))}
+          </div>
+        )}
+      </div>
+
+      {/* Open button */}
+      <Link href={href}
+        style={{
+          background: '#B8935A',
+          color: '#000',
+          padding: '10px 18px',
+          borderRadius: 10,
+          fontSize: 13,
+          fontWeight: 600,
+          textAlign: 'center',
+          textDecoration: 'none',
+          transition: 'all 0.15s',
+          letterSpacing: '0.02em',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = '#a8824a' }}
+        onMouseLeave={e => { e.currentTarget.style.background = '#B8935A' }}>
+        Open Pipeline →
+      </Link>
+    </div>
+  )
+}
+
+// ─── Date helpers ────────────────────────────────────────────────────
+function getBuckets(timeframe) {
+  const buckets = []
+  const now = new Date()
+  if (timeframe === 'daily') {
+    for (let i = 6; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - i); start.setHours(0,0,0,0)
+      const end = new Date(start); end.setDate(start.getDate() + 1)
+      buckets.push({ start, end })
+    }
+  } else if (timeframe === 'weekly') {
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - (i + 1) * 7); start.setHours(0,0,0,0)
+      const end = new Date(start); end.setDate(start.getDate() + 7)
+      buckets.push({ start, end })
+    }
+  } else {
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - (i + 1) * 30); start.setHours(0,0,0,0)
+      const end = new Date(start); end.setDate(start.getDate() + 30)
+      buckets.push({ start, end })
+    }
+  }
+  return buckets
+}
+
+function getBucketLabels(timeframe, buckets) {
+  if (timeframe === 'daily') {
+    return buckets.map(b => b.start.toLocaleDateString('en-US', { weekday: 'short' }))
+  }
+  if (timeframe === 'weekly') {
+    return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+  }
+  return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'short' }))
+}
+
+function getRangeLabel(timeframe) {
+  const now = new Date()
+  const opts = { month: 'short', day: 'numeric' }
+  if (timeframe === 'daily') {
+    const start = new Date(now); start.setDate(now.getDate() - 6)
+    return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
+  }
+  if (timeframe === 'weekly') {
+    const start = new Date(now); start.setDate(now.getDate() - 42)
+    return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
+  }
+  const start = new Date(now); start.setDate(now.getDate() - 180)
+  return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
+}
+
+function currentRangeStart(timeframe) {
+  const now = new Date()
+  const start = new Date(now)
+  if (timeframe === 'daily')   start.setHours(0,0,0,0)
+  if (timeframe === 'weekly')  start.setDate(now.getDate() - 7)
+  if (timeframe === 'monthly') start.setDate(now.getDate() - 30)
+  return start
+}
+
+function timeAgoShort(dateStr) {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  const hrs  = Math.floor(mins / 60)
+  const days = Math.floor(hrs / 24)
+  if (mins < 60) return `${mins}m`
+  if (hrs < 24)  return `${hrs}h`
+  return `${days}d`
+}
+
+// ─── Main ────────────────────────────────────────────────────────────
 export default function Home() {
-  const [leads,         setLeads]         = useState([])
-  const [msgMap,        setMsgMap]        = useState({}) // { [lead_id]: Message[] }
-  const [callLogs,      setCallLogs]      = useState({}) // { [ghl_contact_id]: log }
-  const [ghlContacts,   setGhlContacts]   = useState([])
-  const [dmTimeframe,   setDmTimeframe]   = useState('weekly')
-  const [callTimeframe, setCallTimeframe] = useState('weekly')
-  const [loading,       setLoading]       = useState(true)
+  const [dmTimeframe, setDmTimeframe] = useState('daily')
+  const [outreachTimeframe, setOutreachTimeframe] = useState('daily')
+
+  const [leads, setLeads] = useState([])
+  const [messages, setMessages] = useState([])
+  const [contacts, setContacts] = useState([])
+  const [callLogs, setCallLogs] = useState({})
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
     try {
-      const [leadsRes, messagesRes, logsRes, ghlRes] = await Promise.all([
-        supabase.from('leads').select('*').order('created_at', { ascending: false }),
-        supabase.from('messages').select('*').order('created_at', { ascending: true }),
-        supabase.from('call_logs').select('*'),
-        fetch('/api/ghl-contacts'),
-      ])
+      const { data: leadsData } = await supabase.from('leads').select('*')
+      setLeads(leadsData || [])
 
-      const ghlData = await ghlRes.json()
+      const { data: msgsData } = await supabase.from('messages')
+        .select('*').order('created_at', { ascending: false })
+      setMessages(msgsData || [])
 
-      // Build message map { lead_id → messages[] sorted asc }
-      const map = {}
-      messagesRes.data?.forEach(m => {
-        if (!map[m.lead_id]) map[m.lead_id] = []
-        map[m.lead_id].push(m)
-      })
+      const res = await fetch('/api/ghl-contacts')
+      const data = await res.json()
+      setContacts(data.contacts || [])
 
-      // Build call logs map { ghl_contact_id → log }
+      const { data: logs } = await supabase.from('call_logs').select('*')
       const logsMap = {}
-      logsRes.data?.forEach(log => { logsMap[log.ghl_contact_id] = log })
-
-      setLeads(leadsRes.data || [])
-      setMsgMap(map)
+      logs?.forEach(log => { logsMap[log.ghl_contact_id] = log })
       setCallLogs(logsMap)
-      setGhlContacts(ghlData.contacts || [])
-    } catch (err) {
-      console.error(err)
-    }
+    } catch (err) { console.error('Fetch error:', err) }
     setLoading(false)
   }
 
-  // ── DM Pipeline stats (timeframe-scoped) ─────────────────────────────────────
-  const dmStart  = getStartDate(dmTimeframe)
-  const dmLeads  = leads.filter(l => new Date(l.created_at) >= dmStart)
-  const dmStats  = {
-    sent:       dmLeads.length,
-    qualifying: dmLeads.filter(l => l.status === 'qualifying').length,
-    linkSent:   dmLeads.filter(l => l.status === 'link sent').length,
-    booked:     dmLeads.filter(l => l.status === 'booked').length,
-  }
+  // ─── DM stats ─────────────────────────────────────────────────────
+  const dmStart = currentRangeStart(dmTimeframe)
+  const dmLeadsInRange = leads.filter(l => new Date(l.created_at) >= dmStart)
 
-  // ── Call Pipeline stats — current tag state, not events ──────────────────────
-  const callStart    = getStartDate(callTimeframe)
-  const callContacts = ghlContacts.filter(c => new Date(c.dateAdded) >= callStart)
-  const callStats    = {
-    total:    callContacts.length,
-    called:   callContacts.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length,
-    answered: callContacts.filter(c => answeredTags.includes(callLogs[c.id]?.tag || 'uncalled')).length,
-    booked:   callContacts.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length,
-  }
+  const dmMessages   = dmLeadsInRange.length
+  const dmQualifying = dmLeadsInRange.filter(l => l.status === 'qualifying' || l.status === 'new').length
+  const dmLinkSent   = dmLeadsInRange.filter(l => l.status === 'link sent').length
+  const dmBooked     = dmLeadsInRange.filter(l => l.status === 'booked').length
 
-  // ── Needs Your Reply ──────────────────────────────────────────────────────────
-  // Any lead where the last message is inbound (we haven't replied yet)
-  // Excludes ghosted, booked, disqualified
-  const excludedStatuses = ['ghosted', 'booked', 'disqualified']
-  const allWaiting = leads
+  const dmStats = [
+    { label: 'Messages',   value: dmMessages,   color: '#B8935A' },
+    { label: 'Qualifying', value: dmQualifying, color: '#378ADD' },
+    { label: 'Link Sent',  value: dmLinkSent,   color: '#9B59B6' },
+    { label: 'Booked',     value: dmBooked,     color: '#2ECC71' },
+  ]
+
+  const dmBuckets = getBuckets(dmTimeframe)
+  const dmLabels  = getBucketLabels(dmTimeframe, dmBuckets)
+  const dmSeries = [
+    {
+      color: '#B8935A',
+      data: dmBuckets.map(b => leads.filter(l => {
+        const t = new Date(l.created_at)
+        return t >= b.start && t < b.end
+      }).length),
+    },
+    {
+      color: '#378ADD',
+      data: dmBuckets.map(b => leads.filter(l => {
+        const t = new Date(l.created_at)
+        return t >= b.start && t < b.end && (l.status === 'qualifying' || l.status === 'new')
+      }).length),
+    },
+    {
+      color: '#9B59B6',
+      data: dmBuckets.map(b => leads.filter(l => {
+        const t = new Date(l.created_at)
+        return t >= b.start && t < b.end && l.status === 'link sent'
+      }).length),
+    },
+    {
+      color: '#2ECC71',
+      data: dmBuckets.map(b => leads.filter(l => {
+        const t = new Date(l.created_at)
+        return t >= b.start && t < b.end && l.status === 'booked'
+      }).length),
+    },
+  ]
+
+  // ─── Top DMs awaiting reply ───────────────────────────────────────
+  // For each lead, find last message — if inbound, they're waiting on us
+  const dmsByLead = {}
+  messages.forEach(m => {
+    if (!dmsByLead[m.lead_id] || new Date(m.created_at) > new Date(dmsByLead[m.lead_id].created_at)) {
+      dmsByLead[m.lead_id] = m
+    }
+  })
+  const awaitingReply = leads
     .filter(l => {
-      if (excludedStatuses.includes(l.status)) return false
-      const msgs = msgMap[l.id] || []
-      if (msgs.length === 0) return false
-      return msgs[msgs.length - 1].direction === 'inbound'
+      const lastMsg = dmsByLead[l.id]
+      if (!lastMsg) return false
+      if (lastMsg.direction !== 'inbound') return false
+      if (l.status === 'booked' || l.status === 'disqualified') return false
+      return true
     })
-    .map(l => {
-      const msgs    = msgMap[l.id] || []
-      const lastMsg = msgs[msgs.length - 1]
-      return { ...l, lastMsg }
-    })
-    .sort((a, b) => new Date(b.lastMsg?.created_at) - new Date(a.lastMsg?.created_at))
+    .map(l => ({ lead: l, lastMsg: dmsByLead[l.id] }))
+    .sort((a, b) => new Date(b.lastMsg.created_at) - new Date(a.lastMsg.created_at))
 
-  const waitingCount   = allWaiting.length
-  const displayedLeads = allWaiting.slice(0, 6)
-  const hiddenCount    = waitingCount - displayedLeads.length
+  function renderDmItem({ lead, lastMsg }, i) {
+    const avatar = lead.profile_pic_url
+    const initial = (lead.name || lead.ig_handle || '?')[0].toUpperCase()
+    return (
+      <div key={lead.id} style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 10px',
+        background: '#0d0d0d', border: '1px solid #1a1a1a',
+        borderRadius: 8,
+      }}>
+        {avatar ? (
+          <img src={avatar} alt="" style={{
+            width: 32, height: 32, borderRadius: 999, objectFit: 'cover', flexShrink: 0,
+          }} onError={e => { e.currentTarget.style.display = 'none' }} />
+        ) : (
+          <div style={{
+            width: 32, height: 32, borderRadius: 999, flexShrink: 0,
+            background: '#B8935A22', color: '#B8935A',
+            border: '1px solid #B8935A44',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700,
+          }}>{initial}</div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 12, color: '#e0e0e0', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            @{lead.ig_handle || lead.name || 'unknown'}
+          </p>
+          <p style={{ fontSize: 11, color: '#777', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {lastMsg.body || lastMsg.message || '(media)'}
+          </p>
+        </div>
+        <span style={{ fontSize: 10, color: '#555', flexShrink: 0 }}>
+          {timeAgoShort(lastMsg.created_at)}
+        </span>
+      </div>
+    )
+  }
+
+  // ─── Outreach stats ───────────────────────────────────────────────
+  const outreachStart = currentRangeStart(outreachTimeframe)
+  const outreachInRange = contacts.filter(c => new Date(c.dateAdded) >= outreachStart)
+
+  const calledTags = ['called once','called twice','called three times','call back','not interested','booked']
+  const totalLeads = outreachInRange.length
+  const calledCount = outreachInRange.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
+  const bookedCount = outreachInRange.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
+
+  const outreachStats = [
+    { label: 'Total Leads', value: totalLeads,  color: '#B8935A' },
+    { label: 'Called',      value: calledCount, color: '#378ADD' },
+    { label: 'Booked',      value: bookedCount, color: '#2ECC71' },
+  ]
+
+  const outreachBuckets = getBuckets(outreachTimeframe)
+  const outreachLabels  = getBucketLabels(outreachTimeframe, outreachBuckets)
+  const outreachSeries = [
+    {
+      color: '#B8935A',
+      data: outreachBuckets.map(b => contacts.filter(c => {
+        const t = new Date(c.dateAdded)
+        return t >= b.start && t < b.end
+      }).length),
+    },
+    {
+      color: '#378ADD',
+      data: outreachBuckets.map(b => contacts.filter(c => {
+        const t = new Date(c.dateAdded)
+        return t >= b.start && t < b.end && calledTags.includes(callLogs[c.id]?.tag || 'uncalled')
+      }).length),
+    },
+    {
+      color: '#2ECC71',
+      data: outreachBuckets.map(b => contacts.filter(c => {
+        const t = new Date(c.dateAdded)
+        return t >= b.start && t < b.end && (callLogs[c.id]?.tag || 'uncalled') === 'booked'
+      }).length),
+    },
+  ]
+
+  // ─── Top leads for outreach (strongest leads) ─────────────────────
+  // Filter: invest=Yes, bothered 4 or 5, age 22-45, currently in green window
+  // Sort: bothered desc, then age asc (younger first)
+  const strongestLeads = contacts
+    .filter(c => {
+      const tag = callLogs[c.id]?.tag || 'uncalled'
+      // Skip already booked or not interested
+      if (['booked', 'not interested', 'called three times'].includes(tag)) return false
+
+      const invest = getField(c.customFields, FIELD_IDS.invest)
+      if (!invest || !invest.toLowerCase().includes('yes')) return false
+
+      const botheredRaw = getField(c.customFields, FIELD_IDS.bothered)
+      const bothered = parseInt(botheredRaw)
+      if (isNaN(bothered) || bothered < 4) return false
+
+      const ageRaw = getField(c.customFields, FIELD_IDS.age)
+      const age = parseInt(ageRaw)
+      if (isNaN(age) || age < 22 || age > 45) return false
+
+      if (!isInGreenWindow(c.phone)) return false
+
+      return true
+    })
+    .map(c => ({
+      contact: c,
+      bothered: parseInt(getField(c.customFields, FIELD_IDS.bothered)),
+      age:      parseInt(getField(c.customFields, FIELD_IDS.age)),
+      tag:      callLogs[c.id]?.tag || 'uncalled',
+    }))
+    .sort((a, b) => {
+      if (b.bothered !== a.bothered) return b.bothered - a.bothered
+      return a.age - b.age
+    })
+
+  function renderLeadItem({ contact, bothered, age, tag }, i) {
+    const tagColors = {
+      uncalled: '#888',
+      'called once': '#378ADD',
+      'called twice': '#F0A500',
+      'call back': '#9B59B6',
+    }
+    const tagColor = tagColors[tag] || '#888'
+    const initial = (contact.contactName || '?')[0].toUpperCase()
+    return (
+      <div key={contact.id} style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 10px',
+        background: '#0d0d0d', border: '1px solid #1a1a1a',
+        borderRadius: 8,
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 999, flexShrink: 0,
+          background: '#B8935A22', color: '#B8935A',
+          border: '1px solid #B8935A44',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 700,
+        }}>{initial}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 12, color: '#e0e0e0', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {contact.contactName || 'Unknown'}
+          </p>
+          <p style={{ fontSize: 10, color: '#777' }}>
+            {age}y · Bothered {bothered}/5 · 🟢 Good to call
+          </p>
+        </div>
+        <span style={{
+          fontSize: 10, padding: '2px 8px', borderRadius: 999,
+          background: `${tagColor}22`, color: tagColor,
+          border: `1px solid ${tagColor}44`, flexShrink: 0,
+        }}>{tag}</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen" style={{ background: '#0a0a0a' }}>
+    <div style={{ minHeight: 'calc(100vh - 70px)', background: '#0a0a0a', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Brand header */}
-      <div className="flex flex-col items-center justify-center py-6 border-b" style={{ borderColor: '#1a1a1a' }}>
-        <div className="flex items-center gap-3 mb-1">
-          <DumbbellIcon size={32} />
-          <h1 className="font-bold tracking-widest text-xl" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
-          <DumbbellIcon size={32} />
-        </div>
-        <p className="text-xs tracking-widest" style={{ color: '#444' }}>PIPELINE DASHBOARD</p>
+      {/* Top banner */}
+      <div style={{
+        padding: '32px 24px 20px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+      }}>
+        <DumbbellIcon size={48} />
+        <h1 style={{
+          fontWeight: 800,
+          letterSpacing: '0.18em',
+          fontSize: 28,
+          color: '#fff',
+          textAlign: 'center',
+        }}>
+          LARGE DUMBBELLS
+        </h1>
       </div>
 
-      <div className="flex-1 flex flex-col p-6 gap-5">
+      {/* Sales Pipeline header — doubled in size */}
+      <div style={{ textAlign: 'center', padding: '8px 24px 20px' }}>
+        <p style={{
+          fontSize: 22, fontWeight: 700, letterSpacing: '0.2em',
+          color: '#B8935A', textTransform: 'uppercase',
+        }}>Sales Pipeline</p>
+      </div>
+
+      <div style={{
+        flex: 1, padding: '0 24px 24px',
+        maxWidth: 1600, width: '100%', margin: '0 auto',
+        display: 'flex', flexDirection: 'column',
+      }}>
         {loading ? (
-          <p className="text-sm" style={{ color: '#555' }}>Loading dashboard...</p>
+          <p style={{ textAlign: 'center', color: '#555', fontSize: 14 }}>Loading…</p>
         ) : (
-          <>
-            {/* DM Pipeline */}
-            <div className="rounded-xl p-6" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-xs font-bold tracking-widest" style={{ color: '#B8935A' }}>DM PIPELINE</p>
-                <TimeframePicker value={dmTimeframe} onChange={setDmTimeframe} />
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                <StatCard label="Messages Sent" value={dmStats.sent}       color="#B8935A" />
-                <StatCard label="Qualifying"    value={dmStats.qualifying} color="#F0A500" />
-                <StatCard label="Link Sent"     value={dmStats.linkSent}   color="#9B59B6" />
-                <StatCard label="Booked"        value={dmStats.booked}     color="#2ECC71" />
-              </div>
-              <Link href="/analytics" className="mt-3 text-xs inline-block" style={{ color: '#333' }}>
-                View full analytics →
-              </Link>
-            </div>
-
-            {/* Call Pipeline */}
-            <div className="rounded-xl p-6" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-xs font-bold tracking-widest" style={{ color: '#B8935A' }}>CALL PIPELINE</p>
-                <TimeframePicker value={callTimeframe} onChange={setCallTimeframe} />
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                <StatCard label="Total Leads" value={callStats.total}    color="#B8935A" />
-                <StatCard label="Called"      value={callStats.called}   color="#378ADD" />
-                <StatCard label="Answered"    value={callStats.answered} color="#9B59B6" />
-                <StatCard label="Booked"      value={callStats.booked}   color="#2ECC71" />
-              </div>
-              <Link href="/calls" className="mt-3 text-xs inline-block" style={{ color: '#333' }}>
-                View call list →
-              </Link>
-            </div>
-
-            {/* Needs Your Reply */}
-            <div className="rounded-xl p-6" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <p className="text-xs font-bold tracking-widest" style={{ color: '#B8935A' }}>NEEDS YOUR REPLY</p>
-                  {waitingCount > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                      style={{ background: '#B8935A22', color: '#B8935A', border: '1px solid #B8935A44' }}>
-                      {waitingCount} waiting
-                    </span>
-                  )}
-                </div>
-                <Link href="/inbox"
-                  className="text-xs px-3 py-1.5 rounded"
-                  style={{ background: '#1a1a1a', color: '#B8935A', border: '1px solid #B8935A44' }}>
-                  Open inbox →
-                </Link>
-              </div>
-
-              {waitingCount === 0 ? (
-                <div className="flex items-center gap-3 py-4">
-                  <div className="w-2 h-2 rounded-full" style={{ background: '#2ECC71' }} />
-                  <p className="text-sm" style={{ color: '#555' }}>You're all caught up — no leads waiting on a reply.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-2">
-                    {displayedLeads.map(lead => (
-                      <Link href="/inbox" key={lead.id}
-                        className="flex items-center gap-4 p-3 rounded-lg transition-all"
-                        style={{ background: '#0d0d0d', border: '1px solid #222' }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = '#B8935A33'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = '#222'}>
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
-                          style={{ background: '#B8935A22', color: '#B8935A', border: '1px solid #B8935A44' }}>
-                          {(lead.name || lead.ig_handle || '?')[0].toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <p className="text-sm font-medium" style={{ color: '#e0e0e0' }}>
-                              {lead.name || lead.ig_handle}
-                            </p>
-                            <p className="text-xs flex-shrink-0 ml-2" style={{ color: '#444' }}>
-                              {timeAgo(lead.lastMsg?.created_at)}
-                            </p>
-                          </div>
-                          <p className="text-xs truncate" style={{ color: '#666' }}>
-                            {lead.lastMsg?.content || lead.roadblock || '—'}
-                          </p>
-                        </div>
-                        <div className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ background: '#B8935A', boxShadow: '0 0 6px #B8935A88' }} />
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Overflow count */}
-                  {hiddenCount > 0 && (
-                    <Link href="/inbox"
-                      className="mt-3 flex items-center justify-center gap-2 py-2 rounded-lg text-xs transition-all"
-                      style={{ color: '#B8935A', border: '1px solid #B8935A33', background: '#B8935A11' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#B8935A1a'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#B8935A11'}>
-                      +{hiddenCount} more waiting in inbox →
-                    </Link>
-                  )}
-                </>
-              )}
-            </div>
-          </>
+          <div style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
+            gap: 24,
+          }}>
+            <PipelineCard
+              title="DM Pipeline"
+              icon={ChatIcon}
+              href="/inbox"
+              stats={dmStats}
+              series={dmSeries}
+              labels={dmLabels}
+              timeframe={dmTimeframe}
+              setTimeframe={setDmTimeframe}
+              rangeLabel={getRangeLabel(dmTimeframe)}
+              listTitle="DMs awaiting your reply"
+              listItems={awaitingReply}
+              renderListItem={renderDmItem}
+              emptyText="No DMs awaiting reply"
+            />
+            <PipelineCard
+              title="Outreach Pipeline"
+              icon={PhoneIcon}
+              href="/calls"
+              stats={outreachStats}
+              series={outreachSeries}
+              labels={outreachLabels}
+              timeframe={outreachTimeframe}
+              setTimeframe={setOutreachTimeframe}
+              rangeLabel={getRangeLabel(outreachTimeframe)}
+              listTitle="Strongest leads to call now"
+              listItems={strongestLeads}
+              renderListItem={renderLeadItem}
+              emptyText="No leads match criteria right now"
+            />
+          </div>
         )}
       </div>
     </div>

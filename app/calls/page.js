@@ -45,30 +45,14 @@ const COUNTRY_CODES = {
 }
 
 const COUNTRY_TIMEZONES = {
-  '1876': 'America/Jamaica',
-  '1868': 'America/Port_of_Spain',
-  '1246': 'America/Barbados',
-  '1242': 'America/Nassau',
-  '1264': 'America/Anguilla',
-  '1268': 'America/Antigua',
-  '1284': 'America/Tortola',
-  '1340': 'America/St_Thomas',
-  '1345': 'America/Cayman',
-  '1441': 'America/Bermuda',
-  '1473': 'America/Grenada',
-  '1649': 'America/Grand_Turk',
-  '1664': 'America/Montserrat',
-  '1721': 'America/Lower_Princes',
-  '1758': 'America/St_Lucia',
-  '1767': 'America/Dominica',
-  '1784': 'America/St_Vincent',
-  '1787': 'America/Puerto_Rico',
-  '1809': 'America/Santo_Domingo',
-  '1829': 'America/Santo_Domingo',
-  '1849': 'America/Santo_Domingo',
-  '1869': 'America/St_Kitts',
-  '1670': 'Pacific/Saipan',
-  '1671': 'Pacific/Guam',
+  '1876': 'America/Jamaica','1868': 'America/Port_of_Spain','1246': 'America/Barbados',
+  '1242': 'America/Nassau','1264': 'America/Anguilla','1268': 'America/Antigua',
+  '1284': 'America/Tortola','1340': 'America/St_Thomas','1345': 'America/Cayman',
+  '1441': 'America/Bermuda','1473': 'America/Grenada','1649': 'America/Grand_Turk',
+  '1664': 'America/Montserrat','1721': 'America/Lower_Princes','1758': 'America/St_Lucia',
+  '1767': 'America/Dominica','1784': 'America/St_Vincent','1787': 'America/Puerto_Rico',
+  '1809': 'America/Santo_Domingo','1829': 'America/Santo_Domingo','1849': 'America/Santo_Domingo',
+  '1869': 'America/St_Kitts','1670': 'Pacific/Saipan','1671': 'Pacific/Guam',
   '213': 'Africa/Algiers','216': 'Africa/Tunis','218': 'Africa/Tripoli','220': 'Africa/Banjul',
   '221': 'Africa/Dakar','222': 'Africa/Nouakchott','223': 'Africa/Bamako','224': 'Africa/Conakry',
   '225': 'Africa/Abidjan','226': 'Africa/Ouagadougou','227': 'Africa/Niamey','228': 'Africa/Lome',
@@ -427,6 +411,7 @@ export default function Calls() {
   const [timeframe, setTimeframe] = useState('daily')
   const [perPage, setPerPage] = useState(10)
   const [page, setPage] = useState(1)
+  const [selectedRow, setSelectedRow] = useState(null)
 
   const [filters, setFilters] = useState({
     country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [],
@@ -452,6 +437,38 @@ export default function Calls() {
     Object.values(filters).reduce((acc, arr) => acc + (arr.length > 0 ? 1 : 0), 0) + (search ? 1 : 0)
 
   useEffect(() => { fetchData() }, [])
+
+  // ─── Restore state when navigating back from a profile ────────────
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('callsListState')
+      if (!saved) return
+      const state = JSON.parse(saved)
+      if (state.search !== undefined)    setSearch(state.search)
+      if (state.sortBy)                  setSortBy(state.sortBy)
+      if (state.timeframe)               setTimeframe(state.timeframe)
+      if (state.perPage)                 setPerPage(state.perPage)
+      if (state.page)                    setPage(state.page)
+      if (state.filters)                 setFilters(state.filters)
+      if (state.selectedRow)             setSelectedRow(state.selectedRow)
+      sessionStorage.removeItem('callsListState')
+    } catch (err) {
+      console.error('State restore error:', err)
+    }
+  }, [])
+
+  // ─── Scroll to highlighted row when restored ──────────────────────
+  useEffect(() => {
+    if (!loading && selectedRow) {
+      setTimeout(() => {
+        const el = document.getElementById(`contact-row-${selectedRow}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 150)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, contacts])
 
   async function fetchData() {
     try {
@@ -488,6 +505,13 @@ export default function Calls() {
     setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], tag, last_contacted: now } }))
   }
 
+  function saveListState(contactId) {
+    sessionStorage.setItem('callsListState', JSON.stringify({
+      search, sortBy, timeframe, perPage, page, filters,
+      selectedRow: contactId,
+    }))
+  }
+
   const tagColors = {
     uncalled: '#555',
     'called once': '#378ADD',
@@ -497,8 +521,6 @@ export default function Calls() {
     'call back': '#9B59B6',
     booked: '#2ECC71',
   }
-
-  const [selectedRow, setSelectedRow] = useState(null)
 
   function copyToClipboard(text) {
     if (!text || text === '—') return
@@ -624,15 +646,44 @@ export default function Calls() {
 
   return (
     <div className="min-h-screen font-sans" style={{ background: '#0a0a0a' }}>
-      <div className="border-b px-8 py-4 flex items-center"
+
+      {/* Header */}
+      <div className="border-b px-8 py-4 flex items-center justify-between"
         style={{ background: '#111', borderColor: '#222' }}>
-        <div className="flex items-center gap-3">
-          <DumbbellIcon size={28} />
-          <div>
+
+        {/* Left: Home button */}
+        <Link href="/"
+          style={{
+            background: '#1a1a1a', color: '#B8935A',
+            border: '1px solid #B8935A44', padding: '6px 12px',
+            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+          }}>← Home</Link>
+
+        {/* Center: Brand */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-3">
+            <DumbbellIcon size={28} />
             <h1 className="font-bold tracking-widest text-lg" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
-            <p className="text-xs" style={{ color: '#444' }}>Calls Pipeline</p>
           </div>
+          <p className="text-xs font-medium tracking-wider" style={{ color: '#fff' }}>
+            OUTREACH PIPELINE
+          </p>
         </div>
+
+        {/* Right: Email Automation button */}
+        <Link href="/email-automation"
+          style={{
+            background: '#B8935A', color: '#000',
+            padding: '8px 16px', borderRadius: 8,
+            fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            display: 'flex', alignItems: 'center', gap: 8,
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = '#a8824a'}
+          onMouseLeave={e => e.currentTarget.style.background = '#B8935A'}>
+          <span style={{ fontSize: 15 }}>📧</span>
+          <span>Email Automation</span>
+        </Link>
       </div>
 
       <div className="px-8 py-6 max-w-screen-xl mx-auto">
@@ -762,6 +813,7 @@ export default function Calls() {
                     const urgent = needsCall(tag, log?.last_contacted)
                     return (
                       <tr key={contact.id}
+                        id={`contact-row-${contact.id}`}
                         onClick={() => setSelectedRow(prev => prev === contact.id ? null : contact.id)}
                         style={{
                           background: rowBg, borderBottom: '1px solid #1a1a1a',
@@ -786,7 +838,10 @@ export default function Calls() {
                             </div>
                             <Link
                               href={`/calls/${contact.id}`}
-                              onClick={e => e.stopPropagation()}
+                              onClick={e => {
+                                e.stopPropagation()
+                                saveListState(contact.id)
+                              }}
                               style={{
                                 color: urgent ? '#B8935A' : '#aaa',
                                 textShadow: urgent ? '0 0 12px #B8935A88' : 'none',
