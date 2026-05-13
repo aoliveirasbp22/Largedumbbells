@@ -10,12 +10,12 @@ const AUTO_STATUSES   = ['new', 'qualifying', 'ghosted']
 const ALL_STATUSES    = [...AUTO_STATUSES, ...MANUAL_STATUSES]
 
 const STATUS_STYLES = {
-  new:          { bg: '#378ADD22', color: '#378ADD' },
-  qualifying:   { bg: '#F0A50022', color: '#F0A500' },
-  ghosted:      { bg: '#66666622', color: '#666'    },
-  'link sent':  { bg: '#9B59B622', color: '#9B59B6' },
-  booked:       { bg: '#2ECC7122', color: '#2ECC71' },
-  disqualified: { bg: '#E74C3C22', color: '#E74C3C' },
+  new:          { bg: '#378ADD22', color: '#378ADD', border: '#378ADD44' },
+  qualifying:   { bg: '#F0A50022', color: '#F0A500', border: '#F0A50044' },
+  ghosted:      { bg: '#66666622', color: '#888',    border: '#66666644' },
+  'link sent':  { bg: '#9B59B622', color: '#9B59B6', border: '#9B59B644' },
+  booked:       { bg: '#2ECC7122', color: '#2ECC71', border: '#2ECC7144' },
+  disqualified: { bg: '#E74C3C22', color: '#E74C3C', border: '#E74C3C44' },
 }
 
 const UNPIN_STATUSES = ['booked', 'disqualified']
@@ -69,22 +69,18 @@ function currentRangeStart(timeframe) {
   return start
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatusBadge({ status }) {
-  const s = STATUS_STYLES[status] || { bg: '#33333322', color: '#888' }
-  return (
-    <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-      style={{ background: s.bg, color: s.color }}>
-      {status}
-    </span>
-  )
+function displayName(lead) {
+  if (lead.ig_handle) return `@${lead.ig_handle}`
+  if (lead.name)      return lead.name
+  return 'Anonymous'
 }
 
-function PlatformIcon({ platform }) {
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function PlatformIcon({ platform, size = 12 }) {
   if (platform === 'instagram') {
     return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
         <rect x="2" y="2" width="20" height="20" rx="5" stroke="#888" strokeWidth="2"/>
         <circle cx="12" cy="12" r="4" stroke="#888" strokeWidth="2"/>
         <circle cx="17.5" cy="6.5" r="1" fill="#888"/>
@@ -92,7 +88,7 @@ function PlatformIcon({ platform }) {
     )
   }
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="#888" style={{ flexShrink: 0 }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#888" style={{ flexShrink: 0 }}>
       <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"/>
     </svg>
   )
@@ -106,6 +102,110 @@ function StarIcon({ filled, size = 14 }) {
       strokeWidth="2" strokeLinejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
     </svg>
+  )
+}
+
+function DefaultAvatarIcon({ size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="11" fill="#1a1a1a" stroke="#333" strokeWidth="1"/>
+      <circle cx="12" cy="9" r="3.5" fill="#444"/>
+      <path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5" stroke="#444" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+    </svg>
+  )
+}
+
+function Avatar({ lead, size = 28 }) {
+  if (lead?.profile_pic_url) {
+    return (
+      <img
+        src={lead.profile_pic_url}
+        alt=""
+        width={size}
+        height={size}
+        style={{
+          width: size, height: size, borderRadius: '50%',
+          objectFit: 'cover', flexShrink: 0,
+          border: '1px solid #333',
+        }}
+        onError={e => { e.currentTarget.style.display = 'none' }}
+      />
+    )
+  }
+  return <DefaultAvatarIcon size={size} />
+}
+
+function ChevronDown({ size = 10, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <polyline points="6 9 12 15 18 9" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+function StageDropdown({ activeStatus, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function onClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const s = STATUS_STYLES[activeStatus] || { bg: '#33333322', color: '#888', border: '#666' }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+          padding: '4px 10px', borderRadius: 999,
+          fontSize: 12, fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 6,
+          cursor: 'pointer', minWidth: 110, justifyContent: 'space-between',
+        }}>
+        <span>{activeStatus}</span>
+        <ChevronDown size={10} color={s.color} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: '#111', border: '1px solid #333', borderRadius: 8,
+          padding: 4, minWidth: 150, zIndex: 50,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+          display: 'flex', flexDirection: 'column', gap: 2,
+        }}>
+          {ALL_STATUSES.map(st => {
+            const ss = STATUS_STYLES[st]
+            const isActive = st === activeStatus
+            return (
+              <button key={st}
+                onClick={() => { onChange(st); setOpen(false) }}
+                style={{
+                  background: isActive ? ss.bg : 'transparent',
+                  color: ss.color, border: 'none',
+                  padding: '6px 10px', borderRadius: 5,
+                  fontSize: 12, fontWeight: 600, textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#1a1a1a' }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: ss.color, flexShrink: 0,
+                }} />
+                {st}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -134,8 +234,6 @@ export default function DMInbox() {
 
   useEffect(() => { fetchLeads() }, [])
 
-
-  // ─── Restore state on mount ────────────
   useEffect(() => {
     try {
       const saved = localStorage.getItem('inboxState')
@@ -145,7 +243,6 @@ export default function DMInbox() {
       if (state.filter)               setFilter(state.filter)
       if (state.timeframe)            setTimeframe(state.timeframe)
       if (state.selectedLeadId)       {
-        // Will be applied once leads load
         window.__pendingSelectedLeadId = state.selectedLeadId
       }
     } catch (err) {
@@ -153,7 +250,6 @@ export default function DMInbox() {
     }
   }, [])
 
-  // ─── Apply pending selected lead once leads load ────────────
   useEffect(() => {
     if (leads.length > 0 && window.__pendingSelectedLeadId) {
       const lead = leads.find(l => l.id === window.__pendingSelectedLeadId)
@@ -162,7 +258,6 @@ export default function DMInbox() {
     }
   }, [leads])
 
-  // ─── Save state on every change ────────────
   useEffect(() => {
     try {
       localStorage.setItem('inboxState', JSON.stringify({
@@ -178,7 +273,6 @@ export default function DMInbox() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [leadMessages, selectedLead])
 
-  // Real-time subscription
   useEffect(() => {
     const channel = supabase
       .channel('messages-realtime')
@@ -276,7 +370,6 @@ export default function DMInbox() {
     setSending(false)
   }
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
   const leadsWithStatus = leads.map(lead => {
     const derived = deriveStatus(lead, leadMessages[lead.id])
     if (derived !== lead.status && AUTO_STATUSES.includes(derived)) {
@@ -319,7 +412,6 @@ export default function DMInbox() {
   const needsReplyCount  = leadsWithStatus.filter(l => needsReply(leadMessages[l.id])).length
   const pinnedCount      = leadsWithStatus.filter(l => l.pinned).length
 
-  // Stat snapshot — uses leads created in the timeframe
   const rangeStart = currentRangeStart(timeframe)
   const inRange = leadsWithStatus.filter(l => new Date(l.created_at) >= rangeStart)
   const statMessages   = inRange.length
@@ -474,6 +566,7 @@ export default function DMInbox() {
               const lastMsg    = msgs.at(-1)
               const unread     = isUnread(lead, msgs)
               const isSelected = selectedLead?.id === lead.id
+              const sStyle     = STATUS_STYLES[lead.status] || { bg: '#33333322', color: '#888', border: '#666' }
               return (
                 <div key={lead.id} onClick={() => selectLead(lead)}
                   className="p-3 cursor-pointer border-b transition-all"
@@ -482,41 +575,41 @@ export default function DMInbox() {
                     background:  isSelected ? '#1a1a1a' : 'transparent',
                     borderLeft:  isSelected ? '2px solid #B8935A' : '2px solid transparent',
                   }}>
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <button
-                          onClick={e => togglePin(lead.id, lead.pinned, e)}
-                          className="flex-shrink-0 flex items-center justify-center"
-                          style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
-                          title={lead.pinned ? 'Unpin' : 'Pin'}>
-                          <StarIcon filled={!!lead.pinned} size={13} />
-                        </button>
-                        <PlatformIcon platform={lead.platform} />
-                        <span className="font-medium text-sm truncate flex-1"
-                          style={{ color: unread ? '#e0e0e0' : '#888' }}>
-                          {lead.name || lead.ig_handle || '—'}
-                        </span>
-                        <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
-                          {timeAgo(lastMsg?.created_at || lead.created_at)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-1">
-                        {lastMsg ? (
-                          <p className="text-xs truncate flex-1" style={{ color: '#555' }}>
-                            {lastMsg.direction === 'outbound' ? 'You: ' : ''}{lastMsg.content}
-                          </p>
-                        ) : (
-                          <p className="text-xs flex-1" style={{ color: '#444' }}>No messages yet</p>
-                        )}
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <StatusBadge status={lead.status} />
-                          {unread && (
-                            <div className="w-2 h-2 rounded-full"
-                              style={{ background: '#B8935A', boxShadow: '0 0 6px #B8935A' }} />
-                          )}
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <button
+                      onClick={e => togglePin(lead.id, lead.pinned, e)}
+                      className="flex-shrink-0 flex items-center justify-center"
+                      style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                      title={lead.pinned ? 'Unpin' : 'Pin'}>
+                      <StarIcon filled={!!lead.pinned} size={13} />
+                    </button>
+                    <PlatformIcon platform={lead.platform} />
+                    <Avatar lead={lead} size={26} />
+                    <span className="font-medium text-sm truncate flex-1"
+                      style={{ color: unread ? '#e0e0e0' : '#bbb' }}>
+                      {displayName(lead)}
+                    </span>
+                    <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
+                      {timeAgo(lastMsg?.created_at || lead.created_at)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pl-1">
+                    {lastMsg ? (
+                      <p className="text-xs truncate flex-1" style={{ color: '#fff' }}>
+                        {lastMsg.direction === 'outbound' ? 'You: ' : ''}{lastMsg.content}
+                      </p>
+                    ) : (
+                      <p className="text-xs flex-1" style={{ color: '#666' }}>No messages yet</p>
+                    )}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{ background: sStyle.bg, color: sStyle.color, border: `1px solid ${sStyle.border}` }}>
+                        {lead.status}
+                      </span>
+                      {unread && (
+                        <div className="w-2 h-2 rounded-full"
+                          style={{ background: '#B8935A', boxShadow: '0 0 6px #B8935A' }} />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -538,58 +631,30 @@ export default function DMInbox() {
               <div className="px-6 py-3 border-b flex items-center justify-between flex-shrink-0"
                 style={{ background: '#0f0f0f', borderColor: '#1a1a1a' }}>
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
-                    style={{ background: '#B8935A22', color: '#B8935A', border: '1px solid #B8935A44' }}>
-                    {(selectedLead.name || selectedLead.ig_handle || '?')[0].toUpperCase()}
-                  </div>
+                  <Avatar lead={selectedLead} size={36} />
                   <div>
                     <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm" style={{ color: '#e0e0e0' }}>
+                        {displayName(selectedLead)}
+                      </p>
                       <button onClick={e => togglePin(selectedLead.id, selectedLead.pinned, e)}
                         style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
                         title={selectedLead.pinned ? 'Unpin' : 'Pin'}>
                         <StarIcon filled={!!selectedLead.pinned} size={14} />
                       </button>
                       <PlatformIcon platform={selectedLead.platform} />
-                      <p className="font-semibold text-sm" style={{ color: '#e0e0e0' }}>
-                        {selectedLead.name || selectedLead.ig_handle}
-                      </p>
                     </div>
                     <p className="text-xs" style={{ color: '#555' }}>
-                      {selectedLead.ig_handle && `@${selectedLead.ig_handle}`}
-                      {selectedLead.platform && ` · ${selectedLead.platform}`}
+                      {selectedLead.platform && `· ${selectedLead.platform}`}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={activeStatus} />
-                  <select
-                    value={activeStatus}
-                    onChange={e => updateStatus(selectedLead.id, e.target.value)}
-                    className="text-xs px-3 py-1.5 rounded"
-                    style={{ background: '#1a1a1a', color: '#B8935A', border: '1px solid #B8935A44' }}>
-                    <optgroup label="Auto">
-                      {AUTO_STATUSES.map(s => (
-                        <option key={s} value={s} disabled style={{ color: '#555' }}>{s}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Manual">
-                      {MANUAL_STATUSES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
+                <StageDropdown
+                  activeStatus={activeStatus}
+                  onChange={st => updateStatus(selectedLead.id, st)}
+                />
               </div>
-
-              {/* Roadblock */}
-              {selectedLead.roadblock && (
-                <div className="mx-4 mt-3 p-3 rounded-lg flex-shrink-0"
-                  style={{ background: '#B8935A11', border: '1px solid #B8935A33' }}>
-                  <p className="text-xs font-bold mb-1 tracking-wider" style={{ color: '#B8935A' }}>BIGGEST STRUGGLE</p>
-                  <p className="text-sm" style={{ color: '#ccc' }}>{selectedLead.roadblock}</p>
-                </div>
-              )}
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
