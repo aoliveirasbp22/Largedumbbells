@@ -4,7 +4,7 @@ const VERIFY_TOKEN   = process.env.META_VERIFY_TOKEN
 const FB_PAGE_TOKEN  = process.env.META_PAGE_ACCESS_TOKEN
 const IG_TOKEN       = process.env.META_IG_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN
 
-const TRIGGER_WORD   = 'simple'
+const TRIGGER_WORD   = 'blueprint'
 const BLUEPRINT_LINK = 'https://api.leadconnectorhq.com/widget/form/nyKDoOCsbzV2kwTLIS0h?notrack=true'
 
 const FIRST_MESSAGE  = `Hey my friend, here is the blueprint you requested 👇\n${BLUEPRINT_LINK}`
@@ -58,9 +58,15 @@ export async function POST(request) {
           const commentText = (v.message || '').toLowerCase()
           const fromId      = v.from?.id
           const fromName    = v.from?.name
+          const commentId   = v.comment_id    // needed for private_replies endpoint
 
           if (commentText.includes(TRIGGER_WORD) && fromId) {
-            await handleTrigger({ psid: fromId, name: fromName, platform: 'facebook' })
+            await handleTrigger({
+              psid: fromId,
+              name: fromName,
+              platform: 'facebook',
+              commentId,
+            })
           }
         }
       }
@@ -120,7 +126,7 @@ async function fetchProfile(psid, platform) {
 }
 
 // ─── Handle a comment trigger ────────────────────────────────────────────────
-async function handleTrigger({ psid, name, platform }) {
+async function handleTrigger({ psid, name, platform, commentId }) {
   const { data: existing } = await supabase
     .from('leads')
     .select('id')
@@ -149,11 +155,15 @@ async function handleTrigger({ psid, name, platform }) {
     return
   }
 
-  await sendDM({ psid, platform, message: FIRST_MESSAGE })
+  // First message — on Facebook, use private_replies (requires commentId)
+  await sendDM({ psid, platform, message: FIRST_MESSAGE, commentId })
   await saveOutboundMessage(newLead.id, FIRST_MESSAGE)
 
   await delay(DM_DELAY_MS)
 
+  // Second message — always plain Send API (the private_reply is the FIRST one;
+  // after it succeeds the user has an open thread, so subsequent messages route
+  // through the normal /me/messages endpoint).
   await sendDM({ psid, platform, message: SECOND_MESSAGE })
   await saveOutboundMessage(newLead.id, SECOND_MESSAGE)
 }
@@ -273,22 +283,41 @@ async function handleEchoDM(msg, platform) {
 }
 
 // ─── Send a DM via the right Meta endpoint based on platform ─────────────────
-async function sendDM({ psid, platform, message }) {
+// When a commentId is supplied AND platform is facebook, we use the
+// /{comment-id}/private_replies endpoint — required by Meta to send the first
+// DM in response to a public Facebook comment. After that initial message,
+// subsequent messages can flow through the normal /me/messages Send API.
+//
+// Instagram does NOT use private_replies; the regular Send API works for IG
+// comment-triggered DMs as long as the IG Messaging permission is approved.
+async function sendDM({ psid, platform, message, commentId }) {
   const token = platform === 'instagram' ? IG_TOKEN : FB_PAGE_TOKEN
-  const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${token}`
+
+  let url
+  let payload
+
+  if (platform === 'facebook' && commentId) {
+    // Private reply to a specific FB comment
+    url     = `https://graph.facebook.com/v19.0/${commentId}/private_replies?access_token=${token}`
+    payload = { message }
+  } else {
+    // Standard Send API
+    url     = `https://graph.facebook.com/v19.0/me/messages?access_token=${token}`
+    payload = {
+      recipient: { id: psid },
+      message:   { text: message },
+    }
+  }
 
   try {
     const res = await fetch(url, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        recipient: { id: psid },
-        message:   { text: message },
-      }),
+      body:    JSON.stringify(payload),
     })
     if (!res.ok) {
       const err = await res.text()
-      console.error('sendDM error:', err)
+      console.error('sendDM error:', err, '(endpoint:', url.split('?')[0], ')')
     }
     return res
   } catch (err) {
