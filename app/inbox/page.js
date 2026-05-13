@@ -631,7 +631,7 @@ export default function DMInbox() {
         display: 'flex',
         background: BRAND.bg,
         height: isMobile
-          ? (selectedLead ? 'calc(100vh - 70px)' : 'calc(100vh - 240px)')
+          ? (selectedLead ? 'calc(100dvh - 70px)' : 'calc(100dvh - 240px)')
           : 'calc(100vh - 240px)',
         minHeight: isMobile ? 400 : 500,
         flex: isMobile ? 1 : 'initial',
@@ -839,13 +839,63 @@ export default function DMInbox() {
         </div>
 
         {/* ── Main message panel ── */}
-        <div style={{
+        <div style={isMobile && selectedLead ? {
+          // Mobile + lead selected: take over the full viewport
+          position: 'fixed',
+          inset: 0,
+          background: BRAND.bg,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 50,
+        } : {
           flex: 1,
           display: isMobile && !selectedLead ? 'none' : 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          maxWidth: '100%',
           width: isMobile ? '100%' : 'auto',
+          overflow: 'hidden',
         }}>
+          {/* Mobile conversation header - replaces PageHeader when in convo view */}
+          {isMobile && selectedLead && (
+            <div style={{
+              padding: '10px 12px',
+              borderBottom: `1px solid ${BRAND.border}`,
+              background: BRAND.bgCard,
+              display: 'flex', alignItems: 'center', gap: 10,
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={() => setSelectedLead(null)}
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${BRAND.border}`,
+                  color: BRAND.gold,
+                  padding: '6px 10px',
+                  fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.15em', textTransform: 'uppercase',
+                  fontFamily: FONT_BODY,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}>← Inbox</button>
+              <Avatar lead={selectedLead} size={28} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <p style={{
+                    fontSize: 13, fontWeight: 600,
+                    color: BRAND.textPrimary, fontFamily: FONT_BODY,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{displayName(selectedLead)}</p>
+                  <PlatformIcon platform={selectedLead.platform} />
+                </div>
+              </div>
+              <StageDropdown
+                activeStatus={activeStatus}
+                onChange={st => updateStatus(selectedLead.id, st)}
+              />
+            </div>
+          )}
+
           {!selectedLead ? (
             <div style={{
               flex: 1, display: 'flex', flexDirection: 'column',
@@ -862,48 +912,49 @@ export default function DMInbox() {
             </div>
           ) : (
             <>
-              {/* Contact bar */}
-              <div style={{
-                padding: isMobile ? '10px 12px' : '14px 24px',
-                borderBottom: `1px solid ${BRAND.border}`,
-                background: BRAND.bgCard,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 8,
-                flexShrink: 0,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, minWidth: 0 }}>
-                  <Avatar lead={selectedLead} size={isMobile ? 30 : 36} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <p style={{
-                        fontSize: isMobile ? 13 : 14, fontWeight: 600,
-                        color: BRAND.textPrimary, fontFamily: FONT_BODY,
-                        letterSpacing: '0.01em',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: isMobile ? 160 : 'none',
-                      }}>
-                        {displayName(selectedLead)}
-                      </p>
-                      <button onClick={e => togglePin(selectedLead.id, selectedLead.pinned, e)}
-                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexShrink: 0 }}
-                        title={selectedLead.pinned ? 'Unpin' : 'Pin'}>
-                        <StarIcon filled={!!selectedLead.pinned} size={14} />
-                      </button>
-                      <PlatformIcon platform={selectedLead.platform} />
+              {/* Contact bar (desktop only — mobile has its own above) */}
+              {!isMobile && (
+                <div style={{
+                  padding: '14px 24px',
+                  borderBottom: `1px solid ${BRAND.border}`,
+                  background: BRAND.bgCard,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 8,
+                  flexShrink: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                    <Avatar lead={selectedLead} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <p style={{
+                          fontSize: 14, fontWeight: 600,
+                          color: BRAND.textPrimary, fontFamily: FONT_BODY,
+                          letterSpacing: '0.01em',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {displayName(selectedLead)}
+                        </p>
+                        <button onClick={e => togglePin(selectedLead.id, selectedLead.pinned, e)}
+                          style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexShrink: 0 }}
+                          title={selectedLead.pinned ? 'Unpin' : 'Pin'}>
+                          <StarIcon filled={!!selectedLead.pinned} size={14} />
+                        </button>
+                        <PlatformIcon platform={selectedLead.platform} />
+                      </div>
+                      {selectedLead.platform && (
+                        <Eyebrow color={BRAND.textDim} style={{ fontSize: 8, letterSpacing: '0.25em', marginTop: 3 }}>
+                          {selectedLead.platform}
+                        </Eyebrow>
+                      )}
                     </div>
-                    {selectedLead.platform && !isMobile && (
-                      <Eyebrow color={BRAND.textDim} style={{ fontSize: 8, letterSpacing: '0.25em', marginTop: 3 }}>
-                        {selectedLead.platform}
-                      </Eyebrow>
-                    )}
                   </div>
-                </div>
 
-                <StageDropdown
-                  activeStatus={activeStatus}
-                  onChange={st => updateStatus(selectedLead.id, st)}
-                />
-              </div>
+                  <StageDropdown
+                    activeStatus={activeStatus}
+                    onChange={st => updateStatus(selectedLead.id, st)}
+                  />
+                </div>
+              )}
 
               {/* Messages */}
               <div style={{
@@ -966,6 +1017,7 @@ export default function DMInbox() {
                 background: BRAND.bgCard,
                 display: 'flex', gap: isMobile ? 8 : 12,
                 flexShrink: 0,
+                alignItems: 'flex-end',
               }}>
                 <textarea
                   value={reply}
@@ -976,12 +1028,12 @@ export default function DMInbox() {
                     background: BRAND.bgInput,
                     color: BRAND.textPrimary,
                     border: `1px solid ${BRAND.border}`,
-                    padding: isMobile ? '8px 12px' : '10px 14px',
-                    fontSize: 13,
+                    padding: isMobile ? '10px 12px' : '10px 14px',
+                    fontSize: isMobile ? 16 : 13,
                     resize: 'none',
                     outline: 'none',
                     fontFamily: FONT_BODY,
-                    lineHeight: 1.5,
+                    lineHeight: 1.4,
                   }}
                   rows={isMobile ? 1 : 2}
                   onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
