@@ -302,7 +302,6 @@ function useVisualViewportHeight() {
 
 export default function DMInbox() {
   const isMobile = useIsMobile()
-  const vvHeight = useVisualViewportHeight()
   const [leads,        setLeads]        = useState([])
   const [leadMessages, setLeadMessages] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
@@ -859,19 +858,7 @@ export default function DMInbox() {
         </div>
 
         {/* ── Main message panel ── */}
-        <div style={isMobile && selectedLead ? {
-          // Mobile + lead selected: take over the visible viewport.
-          // Using visualViewport.height makes the panel shrink to fit
-          // above the iOS keyboard when it slides up, so the reply box
-          // stays anchored just above the keyboard instead of jumping.
-          position: 'fixed',
-          top: 0, left: 0, right: 0,
-          height: vvHeight ? `${vvHeight}px` : '100dvh',
-          background: BRAND.bg,
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 50,
-        } : {
+        <div style={{
           flex: 1,
           display: isMobile && !selectedLead ? 'none' : 'flex',
           flexDirection: 'column',
