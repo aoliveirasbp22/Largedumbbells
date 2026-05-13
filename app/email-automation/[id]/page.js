@@ -35,6 +35,15 @@ const STEP_TYPES = {
   wait:  { label: 'Wait',       color: '#F0A500' },
 }
 
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20 MB
+const MAX_TOTAL_SIZE = 25 * 1024 * 1024 // 25 MB
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 // ─── Rich text editor ───────────────────────────────────────────────────────
 function RichTextEditor({ value, onChange }) {
   const editorRef = useRef(null)
@@ -144,6 +153,150 @@ function RichTextEditor({ value, onChange }) {
   )
 }
 
+// ─── Attachments field ──────────────────────────────────────────────────────
+function AttachmentsField({ attachments, onChange }) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
+
+  const totalSize = attachments.reduce((sum, a) => sum + (a.size || 0), 0)
+
+  async function handleFiles(files) {
+    setError('')
+    if (!files || files.length === 0) return
+
+    const filesArray = Array.from(files)
+    let runningTotal = totalSize
+
+    for (const file of filesArray) {
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`"${file.name}" is too large. Max 20MB per file.`)
+        return
+      }
+      if (runningTotal + file.size > MAX_TOTAL_SIZE) {
+        setError(`Total attachments would exceed 25MB.`)
+        return
+      }
+      runningTotal += file.size
+    }
+
+    setUploading(true)
+    const newAttachments = [...attachments]
+
+    for (const file of filesArray) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+
+      const { data, error: upErr } = await supabase.storage
+        .from('campaign-attachments')
+        .upload(path, file)
+
+      if (upErr) {
+        console.error('Upload error:', upErr)
+        setError(`Failed to upload "${file.name}": ${upErr.message}`)
+        setUploading(false)
+        return
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('campaign-attachments')
+        .getPublicUrl(path)
+
+      newAttachments.push({
+        filename: file.name,
+        url:      urlData.publicUrl,
+        path:     path,
+        size:     file.size,
+        type:     file.type,
+      })
+    }
+
+    onChange(newAttachments)
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function removeAttachment(idx) {
+    const att = attachments[idx]
+    if (att?.path) {
+      supabase.storage.from('campaign-attachments').remove([att.path]).catch(() => {})
+    }
+    const next = attachments.filter((_, i) => i !== idx)
+    onChange(next)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <label style={{ fontSize: 11, color: '#888' }}>
+          Attachments {attachments.length > 0 && `(${attachments.length})`}
+        </label>
+        {totalSize > 0 && (
+          <span style={{ fontSize: 10, color: totalSize > MAX_TOTAL_SIZE * 0.9 ? '#F0A500' : '#555' }}>
+            {formatFileSize(totalSize)} / 25 MB
+          </span>
+        )}
+      </div>
+
+      {attachments.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+          {attachments.map((att, i) => (
+            <div key={i}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: '#0d0d0d', border: '1px solid #222',
+                borderRadius: 6, padding: '6px 10px',
+              }}>
+              <span style={{ fontSize: 14, color: '#B8935A' }}>📎</span>
+              <a href={att.url} target="_blank" rel="noopener noreferrer"
+                style={{
+                  fontSize: 12, color: '#e0e0e0', textDecoration: 'none',
+                  flex: 1, minWidth: 0,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                {att.filename}
+              </a>
+              <span style={{ fontSize: 10, color: '#555', flexShrink: 0 }}>
+                {formatFileSize(att.size)}
+              </span>
+              <button onClick={() => removeAttachment(i)}
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: '#E74C3C', cursor: 'pointer', fontSize: 13,
+                  padding: '0 4px', flexShrink: 0,
+                }}
+                title="Remove">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        style={{
+          background: '#1a1a1a',
+          color: uploading ? '#555' : '#B8935A',
+          border: '1px solid #B8935A44',
+          padding: '6px 12px', borderRadius: 6,
+          fontSize: 12, fontWeight: 500,
+          cursor: uploading ? 'wait' : 'pointer',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+        <span style={{ fontSize: 13 }}>📎</span>
+        <span>{uploading ? 'Uploading…' : 'Attach file'}</span>
+      </button>
+
+      <input ref={fileInputRef} type="file" multiple
+        onChange={e => handleFiles(e.target.files)}
+        style={{ display: 'none' }} />
+
+      {error && (
+        <p style={{ fontSize: 11, color: '#E74C3C', marginTop: 6 }}>{error}</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Step node ──────────────────────────────────────────────────────────────
 function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, dragHandlers, isDragging }) {
   const type = STEP_TYPES[step.type]
@@ -158,7 +311,6 @@ function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
         cursor: 'grab',
       }}>
 
-      {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: 16, borderBottom: '1px solid #1a1a1a',
@@ -214,7 +366,6 @@ function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
         </div>
       </div>
 
-      {/* Body */}
       <div style={{ padding: 16 }}>
         {step.type === 'email' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -242,6 +393,11 @@ function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
               <label style={{ fontSize: 11, marginBottom: 4, display: 'block', color: '#888' }}>Email body</label>
               <RichTextEditor value={step.body || ''} onChange={body => onUpdate({ ...step, body })} />
             </div>
+
+            <AttachmentsField
+              attachments={step.attachments || []}
+              onChange={attachments => onUpdate({ ...step, attachments })}
+            />
           </div>
         )}
 
@@ -407,13 +563,14 @@ export default function CampaignBuilder() {
       campaign_id: id,
       position:    steps.length,
       type,
-      name:     null,
-      subject:  type === 'email' ? '' : null,
-      preview:  type === 'email' ? '' : null,
-      body:     type === 'email' ? '' : null,
-      message:  type === 'sms' ? '' : null,
-      duration: type === 'wait' ? 1 : null,
-      unit:     type === 'wait' ? 'days' : null,
+      name:        null,
+      subject:     type === 'email' ? '' : null,
+      preview:     type === 'email' ? '' : null,
+      body:        type === 'email' ? '' : null,
+      message:     type === 'sms' ? '' : null,
+      duration:    type === 'wait' ? 1 : null,
+      unit:        type === 'wait' ? 'days' : null,
+      attachments: type === 'email' ? [] : null,
     }
     const { data, error } = await supabase
       .from('email_campaign_steps').insert(newStep).select().single()
@@ -427,13 +584,14 @@ export default function CampaignBuilder() {
     stepSaveTimer.current = setTimeout(async () => {
       setSaving(true)
       await supabase.from('email_campaign_steps').update({
-        name:     updated.name,
-        subject:  updated.subject,
-        preview:  updated.preview,
-        body:     updated.body,
-        message:  updated.message,
-        duration: updated.duration,
-        unit:     updated.unit,
+        name:        updated.name,
+        subject:     updated.subject,
+        preview:     updated.preview,
+        body:        updated.body,
+        message:     updated.message,
+        duration:    updated.duration,
+        unit:        updated.unit,
+        attachments: updated.attachments,
       }).eq('id', updated.id)
       setSaving(false)
       setLastSaved(new Date())
@@ -490,8 +648,6 @@ export default function CampaignBuilder() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: '#111',
       }}>
-
-        {/* Left: Back button */}
         <Link href="/email-automation"
           style={{
             background: '#1a1a1a', color: '#B8935A',
@@ -499,7 +655,6 @@ export default function CampaignBuilder() {
             borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
           }}>← All campaigns</Link>
 
-        {/* Center: Brand */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
             LARGE DUMBBELLS
@@ -509,7 +664,6 @@ export default function CampaignBuilder() {
           </p>
         </div>
 
-        {/* Right: save status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 180, justifyContent: 'flex-end' }}>
           {saving && <span style={{ fontSize: 12, color: '#555' }}>Saving…</span>}
           {!saving && lastSaved && (
@@ -522,7 +676,7 @@ export default function CampaignBuilder() {
 
       <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
 
-        {/* Stats bar at top */}
+        {/* Stats bar */}
         <div style={{
           background: '#111', border: '1px solid #1a1a1a',
           borderRadius: 12, padding: '16px 20px', marginBottom: 24,
@@ -575,15 +729,15 @@ export default function CampaignBuilder() {
               CAMPAIGN SETTINGS
             </p>
 
-            {/* Status toggle */}
+            {/* Draft / Published toggle */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               background: '#0d0d0d', border: '1px solid #222',
               borderRadius: 999, padding: 3,
             }}>
               {[
-                { key: 'draft',  label: 'Draft',     color: '#888' },
-                { key: 'active', label: 'Published', color: '#B8935A' },
+                { key: 'draft',  label: 'Draft' },
+                { key: 'active', label: 'Published' },
               ].map(s => {
                 const isActive = (campaign.status || 'draft') === s.key
                 return (

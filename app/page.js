@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -34,7 +34,7 @@ const FIELD_IDS = {
   invest:   'xLhl7frOJAopwN0r94gX',
 }
 
-// ─── Timezone helpers (slim version - just for checking green window) ───
+// ─── Timezone helpers ───
 const COUNTRY_TIMEZONES = {
   '1876':'America/Jamaica','1868':'America/Port_of_Spain','1246':'America/Barbados',
   '213':'Africa/Algiers','216':'Africa/Tunis','218':'Africa/Tripoli',
@@ -86,8 +86,12 @@ function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
 }
 
-// ─── Mini line chart with x-axis labels ───────────────────────────────
+// ─── Interactive mini line chart with hover tooltip ──────────────────
 function MiniChart({ series, labels, height = 60 }) {
+  const containerRef = useRef(null)
+  const [hover, setHover] = useState(null)
+  // hover = { seriesIdx, pointIdx, mouseX, mouseY }
+
   if (!series.length || !series[0].data.length) {
     return (
       <div style={{ height: height + 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -95,38 +99,159 @@ function MiniChart({ series, labels, height = 60 }) {
       </div>
     )
   }
+
   const allValues = series.flatMap(s => s.data)
   const max = Math.max(...allValues, 1)
   const min = 0
   const range = max - min || 1
   const W = 100
   const H = height
+  const numPoints = series[0].data.length
+
+  // Compute pixel positions for each series's data points
+  // We use viewBox 0..100 but the SVG renders full width — so we need actual pixel positions
+  function getPointPx(seriesIdx, pointIdx, containerWidth) {
+    const s = series[seriesIdx]
+    const v = s.data[pointIdx]
+    const x = (pointIdx / (s.data.length - 1 || 1)) * containerWidth
+    const y = H - ((v - min) / range) * (H - 4) - 2
+    return { x, y, value: v }
+  }
+
+  function handleMouseMove(e) {
+    const rect = containerRef.current.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+    const containerWidth = rect.width
+
+    // Find nearest x-axis point (index)
+    const pointWidth = containerWidth / (numPoints - 1 || 1)
+    const pointIdx = Math.round(mouseX / pointWidth)
+    const clampedIdx = Math.max(0, Math.min(numPoints - 1, pointIdx))
+
+    // Find the series whose value at this point is closest to mouseY
+    let nearestSeriesIdx = 0
+    let nearestDist = Infinity
+    series.forEach((s, idx) => {
+      const { y } = getPointPx(idx, clampedIdx, containerWidth)
+      const dist = Math.abs(y - mouseY)
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearestSeriesIdx = idx
+      }
+    })
+
+    setHover({
+      seriesIdx: nearestSeriesIdx,
+      pointIdx:  clampedIdx,
+      mouseX,
+      mouseY,
+      containerWidth,
+    })
+  }
+
+  function handleMouseLeave() {
+    setHover(null)
+  }
+
+  // Compute hover point's actual pixel position (for the dot and guide line)
+  let hoverPoint = null
+  if (hover) {
+    const { x, y, value } = getPointPx(hover.seriesIdx, hover.pointIdx, hover.containerWidth)
+    hoverPoint = {
+      x, y, value,
+      color: series[hover.seriesIdx].color,
+      label: series[hover.seriesIdx].label || 'Value',
+      date:  labels[hover.pointIdx] || '',
+    }
+  }
 
   return (
     <div>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-        style={{ overflow: 'visible' }}>
-        {series.map((s, idx) => {
-          if (s.data.length === 0) return null
-          const points = s.data.map((v, i) => {
-            const x = (i / (s.data.length - 1 || 1)) * W
-            const y = H - ((v - min) / range) * (H - 4) - 2
-            return `${x},${y}`
-          }).join(' ')
-          return (
-            <polyline key={idx}
-              points={points}
-              fill="none"
-              stroke={s.color}
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={0.9}
-              vectorEffect="non-scaling-stroke"
-            />
-          )
-        })}
-      </svg>
+      <div ref={containerRef}
+        style={{ position: 'relative', cursor: 'crosshair' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}>
+        <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+          style={{ overflow: 'visible', display: 'block' }}>
+          {series.map((s, idx) => {
+            if (s.data.length === 0) return null
+            const points = s.data.map((v, i) => {
+              const x = (i / (s.data.length - 1 || 1)) * W
+              const y = H - ((v - min) / range) * (H - 4) - 2
+              return `${x},${y}`
+            }).join(' ')
+            const isDimmed = hover && hover.seriesIdx !== idx
+            return (
+              <polyline key={idx}
+                points={points}
+                fill="none"
+                stroke={s.color}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={isDimmed ? 0.25 : 0.9}
+                vectorEffect="non-scaling-stroke"
+                style={{ transition: 'opacity 0.15s' }}
+              />
+            )
+          })}
+        </svg>
+
+        {/* Vertical guide line + dot (overlay, in pixel coords) */}
+        {hoverPoint && (
+          <>
+            <div style={{
+              position: 'absolute',
+              left: hoverPoint.x,
+              top: 0,
+              width: 1,
+              height: H,
+              background: '#333',
+              pointerEvents: 'none',
+            }} />
+            <div style={{
+              position: 'absolute',
+              left: hoverPoint.x - 4,
+              top: hoverPoint.y - 4,
+              width: 8,
+              height: 8,
+              borderRadius: 999,
+              background: hoverPoint.color,
+              border: '2px solid #0a0a0a',
+              pointerEvents: 'none',
+              boxShadow: `0 0 8px ${hoverPoint.color}88`,
+            }} />
+          </>
+        )}
+
+        {/* Floating tooltip */}
+        {hoverPoint && (
+          <div style={{
+            position: 'absolute',
+            left: Math.min(hover.mouseX + 12, hover.containerWidth - 110),
+            top: Math.max(hover.mouseY - 40, -10),
+            background: '#000',
+            border: `1px solid ${hoverPoint.color}66`,
+            borderRadius: 6,
+            padding: '6px 10px',
+            pointerEvents: 'none',
+            zIndex: 10,
+            minWidth: 90,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+          }}>
+            <p style={{
+              fontSize: 9, color: '#888',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+              marginBottom: 2,
+            }}>{hoverPoint.date}</p>
+            <p style={{ fontSize: 12, color: hoverPoint.color, fontWeight: 700 }}>
+              {hoverPoint.label}: {hoverPoint.value}
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* X-axis labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
         {labels.map((l, i) => (
@@ -301,6 +426,17 @@ function getBucketLabels(timeframe, buckets) {
   return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'short' }))
 }
 
+function getDetailedLabels(timeframe, buckets) {
+  // Used in tooltip — more readable
+  if (timeframe === 'daily') {
+    return buckets.map(b => b.start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))
+  }
+  if (timeframe === 'weekly') {
+    return buckets.map(b => `Week of ${b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`)
+  }
+  return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))
+}
+
 function getRangeLabel(timeframe) {
   const now = new Date()
   const opts = { month: 'short', day: 'numeric' }
@@ -388,8 +524,10 @@ export default function Home() {
 
   const dmBuckets = getBuckets(dmTimeframe)
   const dmLabels  = getBucketLabels(dmTimeframe, dmBuckets)
+  const dmDetailedLabels = getDetailedLabels(dmTimeframe, dmBuckets)
   const dmSeries = [
     {
+      label: 'Messages',
       color: '#B8935A',
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
@@ -397,6 +535,7 @@ export default function Home() {
       }).length),
     },
     {
+      label: 'Qualifying',
       color: '#378ADD',
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
@@ -404,6 +543,7 @@ export default function Home() {
       }).length),
     },
     {
+      label: 'Link Sent',
       color: '#9B59B6',
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
@@ -411,6 +551,7 @@ export default function Home() {
       }).length),
     },
     {
+      label: 'Booked',
       color: '#2ECC71',
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
@@ -420,7 +561,6 @@ export default function Home() {
   ]
 
   // ─── Top DMs awaiting reply ───────────────────────────────────────
-  // For each lead, find last message — if inbound, they're waiting on us
   const dmsByLead = {}
   messages.forEach(m => {
     if (!dmsByLead[m.lead_id] || new Date(m.created_at) > new Date(dmsByLead[m.lead_id].created_at)) {
@@ -493,8 +633,10 @@ export default function Home() {
 
   const outreachBuckets = getBuckets(outreachTimeframe)
   const outreachLabels  = getBucketLabels(outreachTimeframe, outreachBuckets)
+  const outreachDetailedLabels = getDetailedLabels(outreachTimeframe, outreachBuckets)
   const outreachSeries = [
     {
+      label: 'Total Leads',
       color: '#B8935A',
       data: outreachBuckets.map(b => contacts.filter(c => {
         const t = new Date(c.dateAdded)
@@ -502,6 +644,7 @@ export default function Home() {
       }).length),
     },
     {
+      label: 'Called',
       color: '#378ADD',
       data: outreachBuckets.map(b => contacts.filter(c => {
         const t = new Date(c.dateAdded)
@@ -509,6 +652,7 @@ export default function Home() {
       }).length),
     },
     {
+      label: 'Booked',
       color: '#2ECC71',
       data: outreachBuckets.map(b => contacts.filter(c => {
         const t = new Date(c.dateAdded)
@@ -518,12 +662,9 @@ export default function Home() {
   ]
 
   // ─── Top leads for outreach (strongest leads) ─────────────────────
-  // Filter: invest=Yes, bothered 4 or 5, age 22-45, currently in green window
-  // Sort: bothered desc, then age asc (younger first)
   const strongestLeads = contacts
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
-      // Skip already booked or not interested
       if (['booked', 'not interested', 'called three times'].includes(tag)) return false
 
       const invest = getField(c.customFields, FIELD_IDS.invest)
@@ -612,7 +753,7 @@ export default function Home() {
         </h1>
       </div>
 
-      {/* Sales Pipeline header — doubled in size */}
+      {/* Sales Pipeline header */}
       <div style={{ textAlign: 'center', padding: '8px 24px 20px' }}>
         <p style={{
           fontSize: 22, fontWeight: 700, letterSpacing: '0.2em',
@@ -640,7 +781,7 @@ export default function Home() {
               href="/inbox"
               stats={dmStats}
               series={dmSeries}
-              labels={dmLabels}
+              labels={dmDetailedLabels}
               timeframe={dmTimeframe}
               setTimeframe={setDmTimeframe}
               rangeLabel={getRangeLabel(dmTimeframe)}
@@ -655,7 +796,7 @@ export default function Home() {
               href="/calls"
               stats={outreachStats}
               series={outreachSeries}
-              labels={outreachLabels}
+              labels={outreachDetailedLabels}
               timeframe={outreachTimeframe}
               setTimeframe={setOutreachTimeframe}
               rangeLabel={getRangeLabel(outreachTimeframe)}
