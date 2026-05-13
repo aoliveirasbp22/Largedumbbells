@@ -1,56 +1,64 @@
-// Password gate middleware — protects every page except /login and the API routes
-// that Meta + GHL hit (those need to stay public).
+// POST /api/auth — validates password, sets ld_auth cookie on success.
 //
-// Set SITE_PASSWORD in your Vercel environment variables.
-// Cookie 'ld_auth' is set on successful login and checked on every request.
+// Env vars required (set in Vercel):
+//   SITE_PASSWORD       — the actual password the user types
+//   SITE_PASSWORD_HASH  — opaque token stored in cookie + checked by middleware
+//                         (set this to any random string ~32+ chars)
 
 import { NextResponse } from 'next/server'
 
-const PUBLIC_PATHS = [
-  '/login',
-  '/api/auth',              // Login endpoint — must be reachable without cookie
-  '/api/webhook',           // Meta webhook — must stay public
-  '/api/ghl-webhook',       // GHL webhook (if used) — must stay public
-  '/privacy',               // Required public by Meta for app review
-  '/terms',                 // Required public by Meta for app review
-]
-
-const PUBLIC_PREFIXES = [
-  '/_next',                 // Next.js static assets
-  '/favicon',
-  '/logo-large-dumbbells',  // Logo file
-]
-
-export function middleware(req) {
-  const { pathname } = req.nextUrl
-
-  // Always allow public paths
-  if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next()
-  if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) return NextResponse.next()
-
-  // Check auth cookie
-  const auth = req.cookies.get('ld_auth')?.value
-  const expected = process.env.SITE_PASSWORD_HASH
-
-  if (auth && expected && auth === expected) {
-    return NextResponse.next()
+export async function POST(req) {
+  let body
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ ok: false }, { status: 400 })
   }
 
-  // Not authed → redirect to /login, preserve intended destination
-  const url = req.nextUrl.clone()
-  url.pathname = '/login'
-  url.searchParams.set('next', pathname)
-  return NextResponse.redirect(url)
+  const { password } = body || {}
+  if (!password || typeof password !== 'string') {
+    return NextResponse.json({ ok: false }, { status: 400 })
+  }
+
+  const expected = process.env.SITE_PASSWORD
+  const hash = process.env.SITE_PASSWORD_HASH
+
+  // Diagnostic logs — visible in Vercel function logs
+  console.log('[auth] expected length:', expected?.length, 'received length:', password?.length)
+  console.log('[auth] hash defined:', !!hash)
+
+  if (!expected || !hash) {
+    console.error('[auth] Missing SITE_PASSWORD or SITE_PASSWORD_HASH env vars')
+    return NextResponse.json({ ok: false, reason: 'env_missing' }, { status: 500 })
+  }
+
+  if (password !== expected) {
+    console.log('[auth] Password mismatch')
+    await new Promise(r => setTimeout(r, 300))
+    return NextResponse.json({ ok: false, reason: 'wrong_password' }, { status: 401 })
+  }
+
+  console.log('[auth] Password OK, setting cookie')
+
+  const res = NextResponse.json({ ok: true })
+  // 90-day cookie
+  res.cookies.set('ld_auth', hash, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 90,
+  })
+  return res
 }
 
-export const config = {
-  matcher: [
-    /*
-     * Match everything except:
-     * - Next.js internals (_next/static, _next/image)
-     * - Favicon
-     * - The public paths checked above
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+// GET /api/auth — logout (clears the cookie)
+export async function GET() {
+  const res = NextResponse.json({ ok: true })
+  res.cookies.set('ld_auth', '', {
+    httpOnly: true,
+    path: '/',
+    maxAge: 0,
+  })
+  return res
 }
