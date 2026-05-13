@@ -302,6 +302,25 @@ function useVisualViewportHeight() {
 
 export default function DMInbox() {
   const isMobile = useIsMobile()
+  const vvHeight = useVisualViewportHeight()
+
+  // Lock the body from scrolling when in mobile conversation view
+  // so iOS has nothing to "scroll-to-focus" — our layout stays put.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const inConvo = isMobile && typeof window !== 'undefined' && window.__inboxConvoOpen
+    if (!isMobile) return
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.width = '100%'
+    document.body.style.height = '100%'
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.height = ''
+    }
+  }, [isMobile])
   const [leads,        setLeads]        = useState([])
   const [leadMessages, setLeadMessages] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
@@ -858,7 +877,17 @@ export default function DMInbox() {
         </div>
 
         {/* ── Main message panel ── */}
-        <div style={{
+        <div style={isMobile && selectedLead ? {
+          // Mobile conversation: pin to visual viewport (handles iOS keyboard).
+          // Body is scroll-locked above so iOS can't auto-scroll the page.
+          position: 'fixed',
+          top: 0, left: 0, right: 0,
+          height: vvHeight ? `${vvHeight}px` : '100dvh',
+          background: BRAND.bg,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 100,
+        } : {
           flex: 1,
           display: isMobile && !selectedLead ? 'none' : 'flex',
           flexDirection: 'column',
