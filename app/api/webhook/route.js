@@ -36,9 +36,7 @@ export async function POST(request) {
   const platform = body.object === 'instagram' ? 'instagram' : 'facebook'
 
   for (const entry of body.entry || []) {
-    // Field-based changes (IG comments, IG message changes, FB Page feed)
     for (const change of entry.changes || []) {
-      // Instagram comments
       if (change.field === 'comments') {
         const comment     = change.value
         const commentText = comment?.text?.toLowerCase() || comment?.message?.toLowerCase() || ''
@@ -50,7 +48,6 @@ export async function POST(request) {
         }
       }
 
-      // Facebook Page feed events (comments on FB Page posts come through here)
       if (change.field === 'feed') {
         const v = change.value || {}
         if (v.item === 'comment' && v.verb === 'add') {
@@ -64,7 +61,6 @@ export async function POST(request) {
         }
       }
 
-      // IG messages delivered as a "change" rather than "messaging" entry
       if (change.field === 'messages') {
         const msg = change.value
         if (msg && !msg.is_echo) {
@@ -73,7 +69,6 @@ export async function POST(request) {
       }
     }
 
-    // Standard Messenger / IG DM events
     for (const msg of entry.messaging || []) {
       if (msg.message && !msg.message.is_echo) {
         await handleIncomingDM(msg, platform)
@@ -84,6 +79,34 @@ export async function POST(request) {
   return new Response('OK', { status: 200 })
 }
 
+// ─── Fetch profile info from Meta ────────────────────────────────────────────
+async function fetchProfile(psid, platform) {
+  const token  = platform === 'instagram' ? IG_TOKEN : FB_PAGE_TOKEN
+  const fields = platform === 'instagram'
+    ? 'name,username,profile_pic'
+    : 'name,first_name,last_name,profile_pic'
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${psid}?fields=${fields}&access_token=${token}`
+    )
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('fetchProfile error:', err)
+      return {}
+    }
+    const data = await res.json()
+    return {
+      name:            data.name || null,
+      username:        data.username || null,
+      profile_pic_url: data.profile_pic || null,
+    }
+  } catch (err) {
+    console.error('fetchProfile exception:', err)
+    return {}
+  }
+}
+
 // ─── Handle a comment trigger ────────────────────────────────────────────────
 async function handleTrigger({ psid, name, platform }) {
   const { data: existing } = await supabase
@@ -92,15 +115,18 @@ async function handleTrigger({ psid, name, platform }) {
     .eq('psid', psid)
     .maybeSingle()
 
-  if (existing) return // already handled this person
+  if (existing) return
+
+  const profile = await fetchProfile(psid, platform)
 
   const { data: newLead, error: leadErr } = await supabase
     .from('leads')
     .insert({
       psid,
-      name,
-      ig_handle: platform === 'instagram' ? name : null,
-      status:    'new',
+      name:            profile.name || name || null,
+      ig_handle:       platform === 'instagram' ? (profile.username || name || null) : null,
+      profile_pic_url: profile.profile_pic_url,
+      status:          'new',
       platform,
     })
     .select()
@@ -128,16 +154,20 @@ async function handleIncomingDM(msg, platform) {
 
   let { data: lead } = await supabase
     .from('leads')
-    .select('id, status, platform')
+    .select('id, status, platform, profile_pic_url, name, ig_handle')
     .eq('psid', psid)
     .maybeSingle()
 
   if (!lead) {
+    const profile = await fetchProfile(psid, platform)
     const { data: newLead, error } = await supabase
       .from('leads')
       .insert({
         psid,
-        status:   'new',
+        name:            profile.name,
+        ig_handle:       platform === 'instagram' ? profile.username : null,
+        profile_pic_url: profile.profile_pic_url,
+        status:          'new',
         platform,
       })
       .select()
@@ -147,6 +177,19 @@ async function handleIncomingDM(msg, platform) {
       return
     }
     lead = newLead
+  } else if (!lead.profile_pic_url || !lead.name) {
+    // Backfill if missing
+    const profile = await fetchProfile(psid, platform)
+    if (profile.profile_pic_url || profile.name || profile.username) {
+      await supabase
+        .from('leads')
+        .update({
+          name:            lead.name || profile.name,
+          ig_handle:       lead.ig_handle || (platform === 'instagram' ? profile.username : null),
+          profile_pic_url: lead.profile_pic_url || profile.profile_pic_url,
+        })
+        .eq('id', lead.id)
+    }
   }
 
   await supabase.from('messages').insert({
