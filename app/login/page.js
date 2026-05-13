@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
@@ -7,7 +7,24 @@ import {
   CornerBracket,
 } from '@/lib/brand'
 
-export default function Login() {
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <PageBackground style={{
+        minHeight: '100vh',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Eyebrow color={BRAND.textDim} style={{ fontSize: 10, letterSpacing: '0.3em' }}>
+          Loading…
+        </Eyebrow>
+      </PageBackground>
+    }>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get('next') || '/'
@@ -118,11 +135,13 @@ export default function Login() {
             <BrandButton
               variant="solid"
               size="md"
-              type="submit"
+              onClick={handleSubmit}
               disabled={submitting || !password}
               style={{ width: '100%' }}>
               {submitting ? 'Verifying…' : 'Enter →'}
             </BrandButton>
+            {/* Hidden submit button so Enter key works inside the form */}
+            <button type="submit" style={{ display: 'none' }} aria-hidden="true" />
           </div>
         </form>
 
