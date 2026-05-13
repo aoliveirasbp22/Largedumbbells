@@ -36,18 +36,35 @@ export async function POST(request) {
   const platform = body.object === 'instagram' ? 'instagram' : 'facebook'
 
   for (const entry of body.entry || []) {
-    // Comment-based triggers + Instagram messages via changes
+    // Field-based changes (IG comments, IG message changes, FB Page feed)
     for (const change of entry.changes || []) {
+      // Instagram comments
       if (change.field === 'comments') {
         const comment     = change.value
-        const commentText = comment?.message?.toLowerCase() || ''
+        const commentText = comment?.text?.toLowerCase() || comment?.message?.toLowerCase() || ''
         const fromId      = comment?.from?.id
-        const fromName    = comment?.from?.name || comment?.from?.username
+        const fromName    = comment?.from?.username || comment?.from?.name
 
         if (commentText.includes(TRIGGER_WORD) && fromId) {
-          await handleTrigger({ psid: fromId, name: fromName, platform })
+          await handleTrigger({ psid: fromId, name: fromName, platform: 'instagram' })
         }
       }
+
+      // Facebook Page feed events (comments on FB Page posts come through here)
+      if (change.field === 'feed') {
+        const v = change.value || {}
+        if (v.item === 'comment' && v.verb === 'add') {
+          const commentText = (v.message || '').toLowerCase()
+          const fromId      = v.from?.id
+          const fromName    = v.from?.name
+
+          if (commentText.includes(TRIGGER_WORD) && fromId) {
+            await handleTrigger({ psid: fromId, name: fromName, platform: 'facebook' })
+          }
+        }
+      }
+
+      // IG messages delivered as a "change" rather than "messaging" entry
       if (change.field === 'messages') {
         const msg = change.value
         if (msg && !msg.is_echo) {
@@ -82,7 +99,7 @@ async function handleTrigger({ psid, name, platform }) {
     .insert({
       psid,
       name,
-      ig_handle: name,
+      ig_handle: platform === 'instagram' ? name : null,
       status:    'new',
       platform,
     })
@@ -94,13 +111,11 @@ async function handleTrigger({ psid, name, platform }) {
     return
   }
 
-  // First message — blueprint form link
   await sendDM({ psid, platform, message: FIRST_MESSAGE })
   await saveOutboundMessage(newLead.id, FIRST_MESSAGE)
 
   await delay(DM_DELAY_MS)
 
-  // Second message — opening question
   await sendDM({ psid, platform, message: SECOND_MESSAGE })
   await saveOutboundMessage(newLead.id, SECOND_MESSAGE)
 }
@@ -111,7 +126,6 @@ async function handleIncomingDM(msg, platform) {
   const text = msg.message?.text
   if (!psid || !text) return
 
-  // Find or create the lead
   let { data: lead } = await supabase
     .from('leads')
     .select('id, status, platform')
@@ -119,7 +133,6 @@ async function handleIncomingDM(msg, platform) {
     .maybeSingle()
 
   if (!lead) {
-    // Someone messaged us directly without using a comment trigger
     const { data: newLead, error } = await supabase
       .from('leads')
       .insert({
@@ -136,22 +149,16 @@ async function handleIncomingDM(msg, platform) {
     lead = newLead
   }
 
-  // Save inbound message
   await supabase.from('messages').insert({
     lead_id:   lead.id,
     direction: 'inbound',
     content:   text,
   })
 
-  // Save roadblock if this is the first reply after the auto-question
   const updates = { updated_at: new Date().toISOString() }
   if (lead.status === 'new') {
     updates.roadblock = text
-    // We don't manually set status — it'll be derived as 'qualifying' in the inbox
-    // since the lead now has both outbound and inbound messages
   }
-
-  // Bump platform if we didn't have it before
   if (!lead.platform) updates.platform = platform
 
   await supabase.from('leads').update(updates).eq('id', lead.id)
@@ -160,9 +167,6 @@ async function handleIncomingDM(msg, platform) {
 // ─── Send a DM via the right Meta endpoint based on platform ─────────────────
 async function sendDM({ psid, platform, message }) {
   const token = platform === 'instagram' ? IG_TOKEN : FB_PAGE_TOKEN
-  // Both endpoints currently work via graph.facebook.com /me/messages
-  // when using a Page or IG Business token. If you migrate to the Instagram
-  // Messaging API, change this URL to graph.instagram.com/v21.0/me/messages.
   const url = `https://graph.facebook.com/v19.0/me/messages?access_token=${token}`
 
   try {
@@ -184,7 +188,6 @@ async function sendDM({ psid, platform, message }) {
   }
 }
 
-// ─── Save an outbound message to Supabase ────────────────────────────────────
 async function saveOutboundMessage(leadId, content) {
   await supabase.from('messages').insert({
     lead_id:   leadId,
