@@ -185,15 +185,45 @@ export default function EmailAutomation() {
                   }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
                         <Link href={`/email-automation/${c.id}`}
                           style={{ fontSize: 16, fontWeight: 600, color: '#e0e0e0', textDecoration: 'none' }}>
                           {c.name}
                         </Link>
-                        <span style={{
-                          fontSize: 11, padding: '2px 8px', borderRadius: 999,
-                          fontWeight: 500, background: s.bg, color: s.color,
-                        }}>{c.status}</span>
+
+                        {/* Draft / Published toggle */}
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          background: '#0d0d0d', border: '1px solid #222',
+                          borderRadius: 999, padding: 2,
+                        }}>
+                          {[
+                            { key: 'draft',  label: 'Draft' },
+                            { key: 'active', label: 'Published' },
+                          ].map(opt => {
+                            const isActive = (c.status || 'draft') === opt.key
+                            return (
+                              <button key={opt.key}
+                                onClick={async () => {
+                                  await supabase.from('email_campaigns').update({ status: opt.key }).eq('id', c.id)
+                                  setCampaigns(prev => prev.map(x => x.id === c.id ? { ...x, status: opt.key } : x))
+                                }}
+                                style={{
+                                  background: isActive ? (opt.key === 'active' ? '#B8935A' : '#2a2a2a') : 'transparent',
+                                  color:      isActive ? (opt.key === 'active' ? '#000' : '#ccc') : '#666',
+                                  border:     'none',
+                                  padding:    '3px 10px',
+                                  borderRadius: 999,
+                                  fontSize:   10, fontWeight: 600,
+                                  cursor:     'pointer',
+                                  transition: 'all 0.15s',
+                                  letterSpacing: '0.03em',
+                                }}>
+                                {opt.label}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#555' }}>
                         {c.trigger_tag ? (

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -24,7 +25,6 @@ const FIELD_IDS = {
   invest:   'xLhl7frOJAopwN0r94gX',
 }
 
-// Get a custom field by its ID — same function the call list uses
 function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
 }
@@ -83,8 +83,6 @@ export default function ContactProfile() {
   useEffect(() => { fetchAll() }, [contactId])
 
   async function fetchAll() {
-    // Fetch all contacts from the call list endpoint, then find this one
-    // This is what the call list does, so we know the shape is correct.
     let ghlContact = null
     try {
       const res = await fetch('/api/ghl-contacts')
@@ -142,6 +140,9 @@ export default function ContactProfile() {
       setCallLog(data)
     }
     setLastSaved(new Date())
+
+    // Trigger campaign enrollment logic
+    handleTagChange(contactId, newTag)
   }
 
   if (loading) {
@@ -163,7 +164,6 @@ export default function ContactProfile() {
     )
   }
 
-  // Parse name — the call list uses contact.contactName
   const contactName = contact.contactName || ''
   const firstName = contact.firstName || (contactName.split(' ')[0] || '')
   const lastName  = contact.lastName  || (contactName.split(' ').slice(1).join(' ') || '')
@@ -173,7 +173,6 @@ export default function ContactProfile() {
   const country   = contact.country
   const initials  = ((firstName[0] || contactName[0] || '?') + (lastName[0] || '')).toUpperCase()
 
-  // Custom fields by known ID
   const cf       = contact.customFields || []
   const struggle = getField(cf, FIELD_IDS.struggle)
   const invest   = getField(cf, FIELD_IDS.invest)

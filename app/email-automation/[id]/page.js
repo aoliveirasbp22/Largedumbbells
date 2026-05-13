@@ -490,27 +490,33 @@ export default function CampaignBuilder() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: '#111',
       }}>
-        <div>
+
+        {/* Left: Back button */}
+        <Link href="/email-automation"
+          style={{
+            background: '#1a1a1a', color: '#B8935A',
+            border: '1px solid #B8935A44', padding: '6px 12px',
+            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+          }}>← All campaigns</Link>
+
+        {/* Center: Brand */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
             LARGE DUMBBELLS
           </h1>
-          <p style={{ fontSize: 12, color: '#444' }}>
-            Email Automation / {campaign.name}
+          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
+            CAMPAIGN BUILDER
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+        {/* Right: save status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 180, justifyContent: 'flex-end' }}>
           {saving && <span style={{ fontSize: 12, color: '#555' }}>Saving…</span>}
           {!saving && lastSaved && (
             <span style={{ fontSize: 12, color: '#555' }}>
               Saved {lastSaved.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <Link href="/email-automation"
-            style={{
-              background: '#1a1a1a', color: '#B8935A',
-              border: '1px solid #B8935A44', padding: '6px 12px',
-              borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-            }}>← All campaigns</Link>
         </div>
       </div>
 
@@ -564,9 +570,42 @@ export default function CampaignBuilder() {
           background: '#111', border: '1px solid #1a1a1a',
           borderRadius: 12, padding: 20, marginBottom: 24,
         }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 16, color: '#B8935A' }}>
-            CAMPAIGN SETTINGS
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#B8935A' }}>
+              CAMPAIGN SETTINGS
+            </p>
+
+            {/* Status toggle */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: '#0d0d0d', border: '1px solid #222',
+              borderRadius: 999, padding: 3,
+            }}>
+              {[
+                { key: 'draft',  label: 'Draft',     color: '#888' },
+                { key: 'active', label: 'Published', color: '#B8935A' },
+              ].map(s => {
+                const isActive = (campaign.status || 'draft') === s.key
+                return (
+                  <button key={s.key}
+                    onClick={() => updateField('status', s.key)}
+                    style={{
+                      background: isActive ? (s.key === 'active' ? '#B8935A' : '#2a2a2a') : 'transparent',
+                      color:      isActive ? (s.key === 'active' ? '#000' : '#ccc') : '#666',
+                      border:     'none',
+                      padding:    '6px 14px',
+                      borderRadius: 999,
+                      fontSize:   11, fontWeight: 600,
+                      cursor:     'pointer',
+                      transition: 'all 0.15s',
+                      letterSpacing: '0.03em',
+                    }}>
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>

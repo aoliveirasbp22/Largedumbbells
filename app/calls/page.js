@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
 
 const FIELD_IDS = {
@@ -417,26 +418,6 @@ export default function Calls() {
   const [filters, setFilters] = useState({
     country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [],
   })
-
-  // ─── Hydrate from localStorage ONCE on mount ────────────
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('callsListState')
-      if (saved) {
-        const state = JSON.parse(saved)
-        if (state.search !== undefined) setSearch(state.search)
-        if (state.sortBy)               setSortBy(state.sortBy)
-        if (state.timeframe)            setTimeframe(state.timeframe)
-        if (state.perPage)              setPerPage(state.perPage)
-        if (state.page)                 setPage(state.page)
-        if (state.filters)              setFilters(state.filters)
-        if (state.selectedRow)          setSelectedRow(state.selectedRow)
-      }
-    } catch (err) {
-      console.error('Restore error:', err)
-    }
-    setHydrated(true)
-  }, [])
   const [openFilter, setOpenFilter] = useState(null)
 
   function toggleFilterValue(column, value) {
@@ -459,7 +440,27 @@ export default function Calls() {
 
   useEffect(() => { fetchData() }, [])
 
- // ─── Save state on every change (but only AFTER hydration) ────────────
+  // ─── Hydrate from localStorage ONCE on mount ────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('callsListState')
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (state.search !== undefined) setSearch(state.search)
+        if (state.sortBy)               setSortBy(state.sortBy)
+        if (state.timeframe)            setTimeframe(state.timeframe)
+        if (state.perPage)              setPerPage(state.perPage)
+        if (state.page)                 setPage(state.page)
+        if (state.filters)              setFilters(state.filters)
+        if (state.selectedRow)          setSelectedRow(state.selectedRow)
+      }
+    } catch (err) {
+      console.error('Restore error:', err)
+    }
+    setHydrated(true)
+  }, [])
+
+  // ─── Save state on every change (after hydration) ────────────
   useEffect(() => {
     if (!hydrated) return
     try {
@@ -517,10 +518,12 @@ export default function Calls() {
       await supabase.from('call_logs').insert({ ghl_contact_id: contactId, tag, last_contacted: now })
     }
     setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], tag, last_contacted: now } }))
+
+    // Trigger campaign enrollment logic (runs in background, won't block UI)
+    handleTagChange(contactId, tag)
   }
 
- function saveListState(contactId) {
-    // Update selectedRow in storage so when we come back, that row is highlighted
+  function saveListState(contactId) {
     try {
       const current = JSON.parse(localStorage.getItem('callsListState') || '{}')
       localStorage.setItem('callsListState', JSON.stringify({
