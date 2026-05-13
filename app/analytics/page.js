@@ -6,6 +6,7 @@ import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket,
+  useIsMobile,
 } from '@/lib/brand'
 
 // ─── Config ─────────────────────────────────────────────────────────────
@@ -98,13 +99,13 @@ function buildPeriods(leads, timeframe) {
 }
 
 // ─── Rate Card ──────────────────────────────────────────────────────────
-function RateCard({ label, sublabel, value, color, detail }) {
+function RateCard({ label, sublabel, value, color, detail, isMobile }) {
   return (
     <div style={{
       position: 'relative',
       background: BRAND.bgCard,
       border: `1px solid ${BRAND.border}`,
-      padding: '20px 22px',
+      padding: isMobile ? '14px 14px' : '20px 22px',
       overflow: 'hidden',
     }}>
       <CornerBracket position="tl" size={12} />
@@ -118,23 +119,23 @@ function RateCard({ label, sublabel, value, color, detail }) {
         opacity: 0.5,
       }} />
 
-      <Eyebrow color={color} style={{ fontSize: 10, letterSpacing: '0.25em', marginBottom: 6 }}>
+      <Eyebrow color={color} style={{ fontSize: isMobile ? 9 : 10, letterSpacing: '0.25em', marginBottom: 6 }}>
         {label}
       </Eyebrow>
       <p style={{
-        fontSize: 9, color: BRAND.textDim, marginBottom: 18,
+        fontSize: 9, color: BRAND.textDim, marginBottom: isMobile ? 12 : 18,
         fontFamily: FONT_BODY,
         letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
       }}>{sublabel}</p>
 
       <p style={{
         fontFamily: FONT_DISPLAY,
-        fontSize: 44, fontWeight: 400,
+        fontSize: isMobile ? 30 : 44, fontWeight: 400,
         color, lineHeight: 1,
         letterSpacing: '0.02em',
-        marginBottom: 16,
+        marginBottom: isMobile ? 12 : 16,
         fontVariantNumeric: 'tabular-nums',
-      }}>{value}<span style={{ fontSize: 26, opacity: 0.7 }}>%</span></p>
+      }}>{value}<span style={{ fontSize: isMobile ? 18 : 26, opacity: 0.7 }}>%</span></p>
 
       <div style={{ width: '100%', background: BRAND.bgRaised, height: 2, marginBottom: 12 }}>
         <div style={{ width: `${value}%`, background: color, height: 2, transition: 'width 0.4s ease' }} />
@@ -150,6 +151,7 @@ function RateCard({ label, sublabel, value, color, detail }) {
 
 // ─── Main ───────────────────────────────────────────────────────────────
 export default function Analytics() {
+  const isMobile = useIsMobile()
   const [leads,       setLeads]       = useState([])
   const [loading,     setLoading]     = useState(true)
   const [timeframe,   setTimeframe]   = useState('weekly')
@@ -214,20 +216,25 @@ export default function Analytics() {
         pageLabel="DM Analytics"
         leftSlot={
           <Link href="/inbox" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← DM Pipeline</BrandButton>
+            <BrandButton variant="ghost" size="sm">
+              {isMobile ? '← Inbox' : '← DM Pipeline'}
+            </BrandButton>
           </Link>
         }
-        rightSlot={<div style={{ minWidth: 170 }} />}
+        rightSlot={<div style={{ minWidth: isMobile ? 0 : 170 }} />}
       />
 
-      <div style={{ padding: '32px 24px', maxWidth: 1280, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '20px 14px' : '32px 24px',
+        maxWidth: 1280, margin: '0 auto',
+      }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: isMobile ? 18 : 28 }}>
           <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
             Conversion Intelligence
           </Eyebrow>
-          <DisplayHeading size={38} style={{ marginBottom: 12 }}>
+          <DisplayHeading size={isMobile ? 30 : 38} style={{ marginBottom: 12 }}>
             DM <span style={{ color: BRAND.gold }}>Analytics</span>
           </DisplayHeading>
           <GoldRule width={40} />
@@ -236,7 +243,7 @@ export default function Analytics() {
             fontFamily: FONT_BODY,
             letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
           }}>
-            Click Any Card To Toggle It On The Chart
+            {isMobile ? 'Tap A Card To Toggle Chart' : 'Click Any Card To Toggle It On The Chart'}
           </p>
         </div>
 
@@ -247,9 +254,9 @@ export default function Analytics() {
             {/* Stat cards */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: 12,
-              marginBottom: 24,
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: isMobile ? 8 : 12,
+              marginBottom: isMobile ? 16 : 24,
             }}>
               {CARDS.map(card => {
                 const active = activeCards.includes(card.key)
@@ -286,7 +293,7 @@ export default function Analytics() {
                     </Eyebrow>
                     <p style={{
                       fontFamily: FONT_DISPLAY,
-                      fontSize: 30, fontWeight: 400,
+                      fontSize: isMobile ? 24 : 30, fontWeight: 400,
                       color: active ? card.color : BRAND.textSecondary,
                       lineHeight: 1,
                       letterSpacing: '0.02em',
@@ -305,8 +312,8 @@ export default function Analytics() {
               position: 'relative',
               background: BRAND.bgCard,
               border: `1px solid ${BRAND.border}`,
-              padding: '22px 26px',
-              marginBottom: 24,
+              padding: isMobile ? '16px 14px' : '22px 26px',
+              marginBottom: isMobile ? 16 : 24,
             }}>
               <CornerBracket position="tl" size={14} />
               <CornerBracket position="tr" size={14} />
@@ -326,6 +333,7 @@ export default function Analytics() {
                 <div style={{
                   display: 'flex', gap: 0,
                   border: `1px solid ${BRAND.border}`,
+                  width: isMobile ? '100%' : 'auto',
                 }}>
                   {['daily', 'weekly', 'monthly'].map((t, i) => {
                     const active = timeframe === t
@@ -336,11 +344,12 @@ export default function Analytics() {
                           color: active ? '#000' : BRAND.textMuted,
                           border: 'none',
                           borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
-                          padding: '6px 16px',
+                          padding: isMobile ? '8px 12px' : '6px 16px',
                           fontSize: 10, fontWeight: 700,
                           letterSpacing: '0.2em', textTransform: 'uppercase',
                           fontFamily: FONT_BODY,
                           cursor: 'pointer',
+                          flex: isMobile ? 1 : 'initial',
                         }}>
                         {t}
                       </button>
@@ -458,10 +467,11 @@ export default function Analytics() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 16,
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: isMobile ? 8 : 16,
             }}>
               <RateCard
+                isMobile={isMobile}
                 label="Response Rate"
                 sublabel="Of Messages Sent, Replied"
                 value={responseRate}
@@ -469,6 +479,7 @@ export default function Analytics() {
                 detail={`${nResponded} Of ${totalSent} Replied`}
               />
               <RateCard
+                isMobile={isMobile}
                 label="Ghosted Rate"
                 sublabel="Of Qualifying, Went Cold"
                 value={ghostedRate}
@@ -476,6 +487,7 @@ export default function Analytics() {
                 detail={`${nGhosted} Of ${nEverQualified} Ghosted`}
               />
               <RateCard
+                isMobile={isMobile}
                 label="Link Sent Rate"
                 sublabel="Of Those Who Responded"
                 value={linkSentRate}
@@ -483,6 +495,7 @@ export default function Analytics() {
                 detail={`${nLinkSent} Of ${nResponded} Got The Link`}
               />
               <RateCard
+                isMobile={isMobile}
                 label="Booked Rate"
                 sublabel="Of Links Sent, Booked"
                 value={bookedRate}

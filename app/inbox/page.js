@@ -7,6 +7,7 @@ import {
   STATUS_STYLES,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton, StatusPill,
   CornerBracket,
+  useIsMobile,
 } from '@/lib/brand'
 
 // ─── Status config ────────────────────────────────────────────────────
@@ -196,8 +197,92 @@ function StageDropdown({ activeStatus, onChange }) {
   )
 }
 
+// ─── Mobile filter sheet ──────────────────────────────────────────────
+function InboxFilterSheet({ open, onClose, filter, setFilter, pinnedCount }) {
+  if (!open) return null
+  const options = ['all', 'pinned', ...ALL_STATUSES]
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.75)',
+        zIndex: 200,
+        display: 'flex', alignItems: 'flex-end',
+      }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: BRAND.bg,
+          borderTop: `1px solid ${BRAND.borderGoldStrong}`,
+          width: '100%',
+          maxHeight: '85vh',
+          overflowY: 'auto',
+          position: 'relative',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.8)',
+        }}>
+        <CornerBracket position="tl" size={14} />
+        <CornerBracket position="tr" size={14} />
+
+        <div style={{
+          padding: '18px 20px',
+          borderBottom: `1px solid ${BRAND.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          position: 'sticky', top: 0,
+          background: BRAND.bg,
+          zIndex: 1,
+        }}>
+          <div>
+            <Eyebrow style={{ fontSize: 10, letterSpacing: '0.3em', marginBottom: 6 }}>Filter</Eyebrow>
+            <GoldRule width={24} />
+          </div>
+          <button onClick={onClose}
+            style={{
+              background: 'transparent', border: `1px solid ${BRAND.border}`,
+              color: BRAND.textSecondary,
+              padding: '6px 12px', fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              fontFamily: FONT_BODY, cursor: 'pointer',
+            }}>Close ✕</button>
+        </div>
+
+        <div style={{ padding: '14px 16px 24px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {options.map(f => {
+            const active = filter === f
+            return (
+              <button key={f}
+                onClick={() => { setFilter(f); onClose() }}
+                style={{
+                  background: active ? 'rgba(176, 131, 74, 0.13)' : 'transparent',
+                  color: active ? BRAND.gold : BRAND.textSecondary,
+                  border: `1px solid ${active ? BRAND.borderGoldStrong : BRAND.border}`,
+                  padding: '12px 14px',
+                  fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.2em', textTransform: 'uppercase',
+                  fontFamily: FONT_BODY,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  textAlign: 'left',
+                }}>
+                {f === 'pinned' && <StarIcon filled={active} size={12} />}
+                <span style={{ flex: 1 }}>{f}</span>
+                {f === 'pinned' && pinnedCount > 0 && (
+                  <span style={{ fontSize: 9, opacity: 0.7 }}>({pinnedCount})</span>
+                )}
+                {active && <span>✓</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────
 export default function DMInbox() {
+  const isMobile = useIsMobile()
   const [leads,        setLeads]        = useState([])
   const [leadMessages, setLeadMessages] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
@@ -205,6 +290,7 @@ export default function DMInbox() {
   const [filter,       setFilter]       = useState('all')
   const [search,       setSearch]       = useState('')
   const [sending,      setSending]      = useState(false)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
   const messagesEndRef = useRef(null)
 
   useEffect(() => { fetchLeads() }, [])
@@ -216,7 +302,9 @@ export default function DMInbox() {
       const state = JSON.parse(saved)
       if (state.search !== undefined) setSearch(state.search)
       if (state.filter)               setFilter(state.filter)
-      if (state.selectedLeadId)       {
+      // On mobile, always start on the list view — don't auto-open last convo
+      const onMobile = typeof window !== 'undefined' && window.innerWidth < 768
+      if (state.selectedLeadId && !onMobile) {
         window.__pendingSelectedLeadId = state.selectedLeadId
       }
     } catch (err) {
@@ -411,110 +499,150 @@ export default function DMInbox() {
     <PageBackground style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
 
       <PageHeader
-        pageLabel="DM Pipeline"
+        pageLabel={isMobile && selectedLead ? null : 'DM Pipeline'}
         leftSlot={
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← Home</BrandButton>
-          </Link>
+          isMobile && selectedLead ? (
+            <button
+              onClick={() => setSelectedLead(null)}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${BRAND.border}`,
+                color: BRAND.gold,
+                padding: '6px 10px',
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                fontFamily: FONT_BODY,
+                cursor: 'pointer',
+              }}>
+              ← Inbox
+            </button>
+          ) : (
+            <Link href="/" style={{ textDecoration: 'none' }}>
+              <BrandButton variant="ghost" size="sm">
+                {isMobile ? '←' : '← Home'}
+              </BrandButton>
+            </Link>
+          )
         }
         rightSlot={
           <Link href="/analytics" style={{ textDecoration: 'none' }}>
             <BrandButton variant="ghost" size="sm" style={{ color: BRAND.statusNew, borderColor: 'rgba(74,144,217,0.33)' }}>
-              Analytics →
+              {isMobile ? 'Stats →' : 'Analytics →'}
             </BrandButton>
           </Link>
         }
       />
 
-      {/* Mini stat ribbon */}
-      <div style={{ padding: '14px 24px', background: BRAND.bg, flexShrink: 0 }}>
+      {/* Mini stat ribbon (hidden on mobile when viewing a conversation) */}
+      {!(isMobile && selectedLead) && (
         <div style={{
-          position: 'relative',
-          background: BRAND.bgCard,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 4,
-          display: 'flex',
-          alignItems: 'stretch',
-          overflow: 'hidden',
+          padding: isMobile ? '10px 12px' : '14px 24px',
+          background: BRAND.bg,
+          flexShrink: 0,
         }}>
-          <CornerBracket position="tl" size={14} />
-          <CornerBracket position="tr" size={14} />
-          <CornerBracket position="bl" size={14} />
-          <CornerBracket position="br" size={14} />
-
-          {stats.map((s, idx) => (
-            <div key={s.label} style={{
-              flex: 1,
-              padding: '18px 24px',
-              borderRight: idx < stats.length - 1 ? `1px solid ${BRAND.border}` : 'none',
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              gap: 6,
-              transition: 'background 0.2s',
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0,
-                height: 1,
-                background: `linear-gradient(90deg, transparent, ${s.color}aa, transparent)`,
-                opacity: 0.5,
-              }} />
-              <p style={{
-                fontFamily: FONT_DISPLAY,
-                fontSize: 30, fontWeight: 400, color: s.color,
-                lineHeight: 1, letterSpacing: '0.02em',
-                fontVariantNumeric: 'tabular-nums',
-                margin: 0,
-              }}>
-                {s.value}
-              </p>
-              <Eyebrow color={BRAND.textMuted} style={{ letterSpacing: '0.2em', fontSize: 9 }}>
-                {s.label}
-              </Eyebrow>
-            </div>
-          ))}
-
-          {/* Window label cell */}
           <div style={{
-            padding: '18px 24px',
+            position: 'relative',
+            background: BRAND.bgCard,
+            border: `1px solid ${BRAND.border}`,
+            borderRadius: 4,
             display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'flex-end',
-            gap: 6,
-            background: BRAND.bgRaised,
-            borderLeft: `1px solid ${BRAND.border}`,
-            minWidth: 180,
+            alignItems: 'stretch',
+            flexDirection: isMobile ? 'column' : 'row',
+            overflow: 'hidden',
           }}>
-            <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em' }}>
-              Active Window
-            </Eyebrow>
-            <span style={{
-              fontSize: 12, color: BRAND.textPrimary, fontWeight: 500,
-              fontFamily: FONT_BODY,
+            <CornerBracket position="tl" size={14} />
+            <CornerBracket position="tr" size={14} />
+            <CornerBracket position="bl" size={14} />
+            <CornerBracket position="br" size={14} />
+
+            {/* Stats row (2-col on mobile) */}
+            <div style={{
+              display: isMobile ? 'grid' : 'contents',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'none',
+              gap: isMobile ? 1 : 0,
+              background: isMobile ? BRAND.border : 'transparent',
             }}>
-              Last {ACTIVE_WINDOW_DAYS} days
-            </span>
+              {stats.map((s, idx) => (
+                <div key={s.label} style={{
+                  flex: isMobile ? 'initial' : 1,
+                  padding: isMobile ? '14px 16px' : '18px 24px',
+                  borderRight: !isMobile && idx < stats.length - 1 ? `1px solid ${BRAND.border}` : 'none',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  gap: 6,
+                  background: BRAND.bgCard,
+                  transition: 'background 0.2s',
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0,
+                    height: 1,
+                    background: `linear-gradient(90deg, transparent, ${s.color}aa, transparent)`,
+                    opacity: 0.5,
+                  }} />
+                  <p style={{
+                    fontFamily: FONT_DISPLAY,
+                    fontSize: isMobile ? 26 : 30, fontWeight: 400, color: s.color,
+                    lineHeight: 1, letterSpacing: '0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    margin: 0,
+                  }}>
+                    {s.value}
+                  </p>
+                  <Eyebrow color={BRAND.textMuted} style={{ letterSpacing: '0.2em', fontSize: 9 }}>
+                    {s.label}
+                  </Eyebrow>
+                </div>
+              ))}
+            </div>
+
+            {/* Window label cell */}
+            <div style={{
+              padding: isMobile ? '10px 14px' : '18px 24px',
+              display: 'flex',
+              flexDirection: isMobile ? 'row' : 'column',
+              justifyContent: isMobile ? 'center' : 'center',
+              alignItems: isMobile ? 'center' : 'flex-end',
+              gap: isMobile ? 10 : 6,
+              background: BRAND.bgRaised,
+              borderLeft: !isMobile ? `1px solid ${BRAND.border}` : 'none',
+              borderTop: isMobile ? `1px solid ${BRAND.border}` : 'none',
+              minWidth: isMobile ? 0 : 180,
+            }}>
+              <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em' }}>
+                Active Window
+              </Eyebrow>
+              <span style={{
+                fontSize: 11, color: BRAND.textPrimary, fontWeight: 500,
+                fontFamily: FONT_BODY,
+                letterSpacing: '0.05em',
+              }}>
+                · Last {ACTIVE_WINDOW_DAYS} days
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Inbox content */}
       <div style={{
         display: 'flex',
         background: BRAND.bg,
-        height: 'calc(100vh - 240px)',
-        minHeight: 500,
+        height: isMobile
+          ? (selectedLead ? 'calc(100vh - 70px)' : 'calc(100vh - 240px)')
+          : 'calc(100vh - 240px)',
+        minHeight: isMobile ? 400 : 500,
+        flex: isMobile ? 1 : 'initial',
       }}>
 
-        {/* ── Sidebar ── */}
+        {/* ── Sidebar / list ── */}
         <div style={{
-          width: 300,
-          display: 'flex',
+          width: isMobile ? '100%' : 300,
+          display: isMobile && selectedLead ? 'none' : 'flex',
           flexDirection: 'column',
-          borderRight: `1px solid ${BRAND.border}`,
+          borderRight: !isMobile ? `1px solid ${BRAND.border}` : 'none',
           flexShrink: 0,
           background: BRAND.bgCard,
         }}>
@@ -541,37 +669,62 @@ export default function DMInbox() {
           </div>
 
           <div style={{ padding: 12, borderBottom: `1px solid ${BRAND.border}` }}>
-            <Eyebrow color={BRAND.textDim} style={{ marginBottom: 8, fontSize: 9, letterSpacing: '0.3em' }}>Filter</Eyebrow>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {['all', 'pinned', ...ALL_STATUSES].map(f => {
-                const active = filter === f
-                return (
-                  <button key={f} onClick={() => setFilter(f)}
-                    style={{
-                      background:  active ? BRAND.gold : 'transparent',
-                      color:       active ? '#000' : BRAND.textMuted,
-                      border:      `1px solid ${active ? BRAND.gold : BRAND.border}`,
-                      padding:     '4px 8px',
-                      fontSize:    9,
-                      fontWeight:  700,
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                      fontFamily:  FONT_BODY,
-                      cursor:      'pointer',
-                      display:     'flex', alignItems: 'center', gap: 4,
-                      transition:  'all 0.15s',
-                    }}>
-                    {f === 'pinned' && <StarIcon filled={active} size={9} />}
-                    {f}
-                    {f === 'pinned' && pinnedCount > 0 && (
-                      <span style={{ fontSize: 8, opacity: active ? 0.7 : 1 }}>
-                        ({pinnedCount})
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+            {isMobile ? (
+              <button
+                onClick={() => setFilterSheetOpen(true)}
+                style={{
+                  width: '100%',
+                  background: filter === 'all' ? 'transparent' : 'rgba(176, 131, 74, 0.13)',
+                  color: filter === 'all' ? BRAND.textSecondary : BRAND.gold,
+                  border: `1px solid ${filter === 'all' ? BRAND.border : BRAND.borderGoldStrong}`,
+                  padding: '10px 14px',
+                  fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.2em', textTransform: 'uppercase',
+                  fontFamily: FONT_BODY,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {filter === 'pinned' && <StarIcon filled size={10} />}
+                  Filter: {filter}
+                </span>
+                <span>▾</span>
+              </button>
+            ) : (
+              <>
+                <Eyebrow color={BRAND.textDim} style={{ marginBottom: 8, fontSize: 9, letterSpacing: '0.3em' }}>Filter</Eyebrow>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {['all', 'pinned', ...ALL_STATUSES].map(f => {
+                    const active = filter === f
+                    return (
+                      <button key={f} onClick={() => setFilter(f)}
+                        style={{
+                          background:  active ? BRAND.gold : 'transparent',
+                          color:       active ? '#000' : BRAND.textMuted,
+                          border:      `1px solid ${active ? BRAND.gold : BRAND.border}`,
+                          padding:     '4px 8px',
+                          fontSize:    9,
+                          fontWeight:  700,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          fontFamily:  FONT_BODY,
+                          cursor:      'pointer',
+                          display:     'flex', alignItems: 'center', gap: 4,
+                          transition:  'all 0.15s',
+                        }}>
+                        {f === 'pinned' && <StarIcon filled={active} size={9} />}
+                        {f}
+                        {f === 'pinned' && pinnedCount > 0 && (
+                          <span style={{ fontSize: 8, opacity: active ? 0.7 : 1 }}>
+                            ({pinnedCount})
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {needsReplyCount > 0 && (
@@ -686,7 +839,13 @@ export default function DMInbox() {
         </div>
 
         {/* ── Main message panel ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{
+          flex: 1,
+          display: isMobile && !selectedLead ? 'none' : 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          width: isMobile ? '100%' : 'auto',
+        }}>
           {!selectedLead ? (
             <div style={{
               flex: 1, display: 'flex', flexDirection: 'column',
@@ -705,31 +864,34 @@ export default function DMInbox() {
             <>
               {/* Contact bar */}
               <div style={{
-                padding: '14px 24px',
+                padding: isMobile ? '10px 12px' : '14px 24px',
                 borderBottom: `1px solid ${BRAND.border}`,
                 background: BRAND.bgCard,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 8,
                 flexShrink: 0,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <Avatar lead={selectedLead} size={36} />
-                  <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, minWidth: 0 }}>
+                  <Avatar lead={selectedLead} size={isMobile ? 30 : 36} />
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <p style={{
-                        fontSize: 14, fontWeight: 600,
+                        fontSize: isMobile ? 13 : 14, fontWeight: 600,
                         color: BRAND.textPrimary, fontFamily: FONT_BODY,
                         letterSpacing: '0.01em',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        maxWidth: isMobile ? 160 : 'none',
                       }}>
                         {displayName(selectedLead)}
                       </p>
                       <button onClick={e => togglePin(selectedLead.id, selectedLead.pinned, e)}
-                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
+                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', flexShrink: 0 }}
                         title={selectedLead.pinned ? 'Unpin' : 'Pin'}>
                         <StarIcon filled={!!selectedLead.pinned} size={14} />
                       </button>
                       <PlatformIcon platform={selectedLead.platform} />
                     </div>
-                    {selectedLead.platform && (
+                    {selectedLead.platform && !isMobile && (
                       <Eyebrow color={BRAND.textDim} style={{ fontSize: 8, letterSpacing: '0.25em', marginTop: 3 }}>
                         {selectedLead.platform}
                       </Eyebrow>
@@ -745,7 +907,8 @@ export default function DMInbox() {
 
               {/* Messages */}
               <div style={{
-                flex: 1, overflowY: 'auto', padding: 20,
+                flex: 1, overflowY: 'auto',
+                padding: isMobile ? 14 : 20,
                 display: 'flex', flexDirection: 'column', gap: 8,
               }}>
                 {selectedMessages.length === 0 && (
@@ -798,36 +961,36 @@ export default function DMInbox() {
 
               {/* Reply box */}
               <div style={{
-                padding: 16,
+                padding: isMobile ? 10 : 16,
                 borderTop: `1px solid ${BRAND.border}`,
                 background: BRAND.bgCard,
-                display: 'flex', gap: 12,
+                display: 'flex', gap: isMobile ? 8 : 12,
                 flexShrink: 0,
               }}>
                 <textarea
                   value={reply}
                   onChange={e => setReply(e.target.value)}
-                  placeholder="Type your reply… (⌘↵ to send)"
+                  placeholder={isMobile ? 'Type your reply…' : 'Type your reply… (⌘↵ to send)'}
                   style={{
                     flex: 1,
                     background: BRAND.bgInput,
                     color: BRAND.textPrimary,
                     border: `1px solid ${BRAND.border}`,
-                    padding: '10px 14px',
+                    padding: isMobile ? '8px 12px' : '10px 14px',
                     fontSize: 13,
                     resize: 'none',
                     outline: 'none',
                     fontFamily: FONT_BODY,
                     lineHeight: 1.5,
                   }}
-                  rows={2}
+                  rows={isMobile ? 1 : 2}
                   onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
                   onBlur={e => { e.target.style.borderColor = BRAND.border }}
                   onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendReply() }}
                 />
                 <button onClick={sendReply} disabled={sending || !reply.trim()}
                   style={{
-                    padding: '0 24px',
+                    padding: isMobile ? '0 16px' : '0 24px',
                     background: sending || !reply.trim() ? 'transparent' : BRAND.gold,
                     color:      sending || !reply.trim() ? BRAND.textDim : '#000',
                     border:     `1px solid ${sending || !reply.trim() ? BRAND.border : BRAND.gold}`,
@@ -853,6 +1016,14 @@ export default function DMInbox() {
           )}
         </div>
       </div>
+
+      <InboxFilterSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        filter={filter}
+        setFilter={setFilter}
+        pinnedCount={pinnedCount}
+      />
     </PageBackground>
   )
 }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   CornerBracket, Eyebrow, GoldRule, DisplayHeading, PageBackground,
+  useIsMobile,
 } from '@/lib/brand'
 
 const FIELD_IDS = {
@@ -250,6 +251,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
 // ─── Pipeline card ────────────────────────────────────────────────────
 function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tooltipLabels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
   const [hovered, setHovered] = useState(false)
+  const isMobile = useIsMobile()
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -259,10 +261,10 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         background: BRAND.bgCard,
         border: `1px solid ${hovered ? BRAND.borderGold : BRAND.border}`,
         borderRadius: 4,
-        padding: '20px 22px 18px',
+        padding: isMobile ? '16px 14px 14px' : '20px 22px 18px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        gap: isMobile ? 14 : 18,
         height: '100%',
         transition: 'border-color 0.25s ease',
       }}>
@@ -274,19 +276,28 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
 
       {/* Header */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: isMobile ? 10 : 16,
+          flexDirection: isMobile ? 'column' : 'row',
+        }}>
           <div>
-            <Eyebrow>{phaseLabel}</Eyebrow>
-            <div style={{ marginTop: 6 }}>
-              <DisplayHeading size={24}>{title}</DisplayHeading>
-            </div>
+            <DisplayHeading size={isMobile ? 22 : 24}>{title}</DisplayHeading>
             <div style={{ marginTop: 8 }}>
               <GoldRule width={32} />
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            gap: 10, flexShrink: 0,
+            alignSelf: isMobile ? 'stretch' : 'flex-start',
+            justifyContent: isMobile ? 'space-between' : 'flex-end',
+            width: isMobile ? '100%' : 'auto',
+          }}>
             <span style={{
-              fontSize: 10, color: BRAND.textMuted, fontWeight: 600,
+              fontSize: isMobile ? 9 : 10, color: BRAND.textMuted, fontWeight: 600,
               letterSpacing: '0.15em', textTransform: 'uppercase',
               fontFamily: FONT_BODY,
             }}>
@@ -320,10 +331,12 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         </div>
       </div>
 
-      {/* Stats grid */}
+      {/* Stats grid — on mobile, 2 columns instead of 4 */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${stats.length}, 1fr)`,
+        gridTemplateColumns: isMobile && stats.length > 2
+          ? 'repeat(2, 1fr)'
+          : `repeat(${stats.length}, 1fr)`,
         gap: 1,
         background: BRAND.border,
         padding: 1,
@@ -331,7 +344,7 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         {stats.map(s => (
           <div key={s.label} style={{
             background: BRAND.bgRaised,
-            padding: '12px 14px',
+            padding: isMobile ? '10px 12px' : '12px 14px',
             position: 'relative',
             overflow: 'hidden',
           }}>
@@ -342,7 +355,7 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
             }} />
             <p style={{
               fontFamily: FONT_DISPLAY,
-              fontSize: 26, fontWeight: 400,
+              fontSize: isMobile ? 22 : 26, fontWeight: 400,
               color: s.color, lineHeight: 1,
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
@@ -491,6 +504,7 @@ function timeAgoShort(dateStr) {
 // ─── Main ─────────────────────────────────────────────────────────────
 export default function Home() {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [dmTimeframe, setDmTimeframe] = useState('weekly')
   const [outreachTimeframe, setOutreachTimeframe] = useState('weekly')
 
@@ -772,11 +786,13 @@ export default function Home() {
     <PageBackground style={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
       {/* Hero header */}
       <div style={{
-        padding: '24px 24px 20px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+        padding: isMobile ? '18px 16px 14px' : '24px 24px 20px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: isMobile ? 10 : 14,
       }}>
         <div style={{
-          width: 64, height: 64,
+          width: isMobile ? 48 : 64,
+          height: isMobile ? 48 : 64,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <img
@@ -786,16 +802,26 @@ export default function Home() {
           />
         </div>
 
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <Eyebrow style={{ fontSize: 10, letterSpacing: '0.4em' }}>The Command Center</Eyebrow>
-          <DisplayHeading size={44} style={{ letterSpacing: '0.04em', lineHeight: 0.95 }}>
+        <div style={{
+          textAlign: 'center',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: isMobile ? 8 : 12,
+        }}>
+          <Eyebrow style={{
+            fontSize: isMobile ? 9 : 10,
+            letterSpacing: isMobile ? '0.3em' : '0.4em',
+          }}>The Command Center</Eyebrow>
+          <DisplayHeading
+            size={isMobile ? 30 : 44}
+            style={{ letterSpacing: '0.04em', lineHeight: 0.95 }}>
             Sales <span style={{ color: BRAND.gold }}>Pipeline</span>
           </DisplayHeading>
         </div>
       </div>
 
       <div style={{
-        flex: 1, padding: '8px 24px 24px',
+        flex: 1,
+        padding: isMobile ? '4px 12px 16px' : '8px 24px 24px',
         maxWidth: 1600, width: '100%', margin: '0 auto',
         display: 'flex', flexDirection: 'column',
       }}>
@@ -811,8 +837,8 @@ export default function Home() {
           <div style={{
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(520px, 1fr))',
-            gap: 24,
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(520px, 1fr))',
+            gap: isMobile ? 14 : 24,
           }}>
             <PipelineCard
               phaseLabel="Phase One — Inbound"

@@ -7,6 +7,7 @@ import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket,
+  useIsMobile,
 } from '@/lib/brand'
 
 const STEP_LABELS = {
@@ -29,12 +30,14 @@ function stepSummary(step) {
 }
 
 export default function EnrolledPage() {
+  const isMobile = useIsMobile()
   const params = useParams()
   const id = params.id
 
   const [campaign, setCampaign] = useState(null)
   const [steps, setSteps] = useState([])
   const [enrollments, setEnrollments] = useState([])
+  const [contactsById, setContactsById] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchAll() }, [id])
@@ -53,6 +56,17 @@ export default function EnrolledPage() {
       .from('campaign_enrollments').select('*')
       .eq('campaign_id', id).eq('status', 'active')
     setEnrollments(e || [])
+
+    // Fetch GHL contacts to resolve names
+    try {
+      const res = await fetch('/api/ghl-contacts')
+      const data = await res.json()
+      const map = {}
+      ;(data.contacts || []).forEach(c => { map[c.id] = c })
+      setContactsById(map)
+    } catch (err) {
+      console.error('Failed to fetch GHL contacts:', err)
+    }
 
     setLoading(false)
   }
@@ -105,20 +119,25 @@ export default function EnrolledPage() {
         pageLabel="Enrollment Details"
         leftSlot={
           <Link href={`/email-automation/${id}`} style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← Back To Campaign</BrandButton>
+            <BrandButton variant="ghost" size="sm">
+              {isMobile ? '← Campaign' : '← Back To Campaign'}
+            </BrandButton>
           </Link>
         }
-        rightSlot={<div style={{ minWidth: 150 }} />}
+        rightSlot={<div style={{ minWidth: isMobile ? 0 : 150 }} />}
       />
 
-      <div style={{ padding: '32px 24px', maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '20px 14px' : '32px 24px',
+        maxWidth: 1000, margin: '0 auto',
+      }}>
 
         {/* Hero title */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: isMobile ? 18 : 28 }}>
           <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
             {campaign.name || 'Untitled Campaign'}
           </Eyebrow>
-          <DisplayHeading size={36} style={{ marginBottom: 12 }}>
+          <DisplayHeading size={isMobile ? 28 : 36} style={{ marginBottom: 12 }}>
             Enrolled Contacts
           </DisplayHeading>
           <GoldRule width={40} />
@@ -171,7 +190,7 @@ export default function EnrolledPage() {
 
                   {/* Step header */}
                   <div style={{
-                    padding: 18,
+                    padding: isMobile ? '14px 12px' : 18,
                     borderBottom: `1px solid ${BRAND.border}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 12, flexWrap: 'wrap',
@@ -226,7 +245,7 @@ export default function EnrolledPage() {
                   </div>
 
                   {/* Contacts */}
-                  <div style={{ padding: 18 }}>
+                  <div style={{ padding: isMobile ? 12 : 18 }}>
                     {!hasContacts ? (
                       <p style={{
                         fontSize: 11, color: BRAND.textDim, fontStyle: 'italic',
@@ -237,41 +256,61 @@ export default function EnrolledPage() {
                       </p>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {contactsHere.map(c => (
-                          <Link key={c.id}
-                            href={`/calls/${c.contact_id}`}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '9px 14px',
-                              background: BRAND.bgInput,
-                              border: `1px solid ${BRAND.border}`,
-                              fontSize: 12,
-                              color: BRAND.textSecondary,
-                              fontFamily: FONT_BODY,
-                              textDecoration: 'none',
-                              letterSpacing: '0.02em',
-                              transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = BRAND.borderGoldStrong
-                              e.currentTarget.style.color = BRAND.textPrimary
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.borderColor = BRAND.border
-                              e.currentTarget.style.color = BRAND.textSecondary
-                            }}>
-                            <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
-                              ID
-                            </Eyebrow>
-                            <code style={{
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              color: BRAND.textPrimary,
-                              letterSpacing: '0.02em',
-                            }}>{c.contact_id}</code>
-                            <span style={{ marginLeft: 'auto', color: BRAND.textDim, fontSize: 12 }}>→</span>
-                          </Link>
-                        ))}
+                        {contactsHere.map(c => {
+                          const contact = contactsById[c.contact_id]
+                          const name = contact?.contactName || 'Unknown Contact'
+                          const email = contact?.email
+                          const initial = (name || '?')[0].toUpperCase()
+                          return (
+                            <Link key={c.id}
+                              href={`/calls/${c.contact_id}`}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 12,
+                                padding: '10px 14px',
+                                background: BRAND.bgInput,
+                                border: `1px solid ${BRAND.border}`,
+                                fontFamily: FONT_BODY,
+                                textDecoration: 'none',
+                                transition: 'all 0.15s',
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.borderColor = BRAND.borderGoldStrong
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.borderColor = BRAND.border
+                              }}>
+                              <div style={{
+                                width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+                                background: 'transparent',
+                                color: BRAND.gold,
+                                border: `1px solid ${BRAND.borderGold}`,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 12, fontWeight: 700,
+                                fontFamily: FONT_BODY,
+                              }}>{initial}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{
+                                  fontSize: 13, fontWeight: 500,
+                                  color: BRAND.textPrimary,
+                                  letterSpacing: '0.01em',
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>
+                                  {name}
+                                </p>
+                                {email && (
+                                  <p style={{
+                                    fontSize: 10, color: BRAND.textMuted, marginTop: 2,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    letterSpacing: '0.02em',
+                                  }}>
+                                    {email}
+                                  </p>
+                                )}
+                              </div>
+                              <span style={{ color: BRAND.textDim, fontSize: 14, flexShrink: 0 }}>→</span>
+                            </Link>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

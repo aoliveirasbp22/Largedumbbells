@@ -9,6 +9,7 @@ import {
   TAG_COLORS,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket,
+  useIsMobile, formatPhone, phoneHref,
 } from '@/lib/brand'
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
@@ -67,7 +68,8 @@ function CopyButton({ value }) {
   )
 }
 
-function FieldRow({ label, value, copyable }) {
+function FieldRow({ label, value, displayValue, copyable, actionHref }) {
+  const shown = displayValue ?? value
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 6,
@@ -78,17 +80,38 @@ function FieldRow({ label, value, copyable }) {
         {label}
       </Eyebrow>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-        <p style={{
-          fontSize: 13,
-          color: value ? BRAND.textPrimary : BRAND.textDim,
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.5,
-          fontFamily: FONT_BODY,
-          letterSpacing: '0.01em',
-          flex: 1,
-        }}>
-          {value || '—'}
-        </p>
+        {actionHref && value ? (
+          <a
+            href={actionHref}
+            style={{
+              fontSize: 13,
+              color: BRAND.gold,
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.5,
+              fontFamily: FONT_BODY,
+              letterSpacing: '0.01em',
+              flex: 1,
+              textDecoration: 'none',
+              borderBottom: '1px dotted transparent',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderBottomColor = BRAND.gold }}
+            onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}>
+            {shown}
+          </a>
+        ) : (
+          <p style={{
+            fontSize: 13,
+            color: value ? BRAND.textPrimary : BRAND.textDim,
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.5,
+            fontFamily: FONT_BODY,
+            letterSpacing: '0.01em',
+            flex: 1,
+          }}>
+            {shown || '—'}
+          </p>
+        )}
         {copyable && value && <CopyButton value={value} />}
       </div>
     </div>
@@ -128,6 +151,7 @@ function SectionCard({ children, title, style = {} }) {
 export default function ContactProfile() {
   const params = useParams()
   const contactId = params.id ?? params.contactId
+  const isMobile = useIsMobile()
 
   const [contact, setContact] = useState(null)
   const [callLog, setCallLog] = useState(null)
@@ -298,16 +322,22 @@ export default function ContactProfile() {
         }
       />
 
-      <div style={{ padding: '32px 24px', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '20px 14px' : '32px 24px',
+        maxWidth: 1100, margin: '0 auto',
+      }}>
 
         {/* Profile hero card */}
         <div style={{
           position: 'relative',
           background: BRAND.bgCard,
           border: `1px solid ${BRAND.border}`,
-          padding: '28px 32px',
-          marginBottom: 24,
-          display: 'flex', alignItems: 'center', gap: 24,
+          padding: isMobile ? '20px 18px' : '28px 32px',
+          marginBottom: isMobile ? 16 : 24,
+          display: 'flex',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          gap: isMobile ? 14 : 24,
+          flexDirection: isMobile ? 'column' : 'row',
         }}>
           <CornerBracket position="tl" />
           <CornerBracket position="tr" />
@@ -316,14 +346,17 @@ export default function ContactProfile() {
 
           {/* Avatar */}
           <div style={{
-            width: 80, height: 80, borderRadius: 999,
+            width: isMobile ? 60 : 80,
+            height: isMobile ? 60 : 80,
+            borderRadius: 999,
             background: 'transparent',
             color: BRAND.gold,
             border: `1px solid ${BRAND.borderGoldStrong}`,
             boxShadow: `0 0 20px ${BRAND.goldGlow}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: FONT_DISPLAY,
-            fontSize: 30, fontWeight: 400,
+            fontSize: isMobile ? 24 : 30,
+            fontWeight: 400,
             letterSpacing: '0.02em',
             flexShrink: 0,
           }}>
@@ -334,10 +367,16 @@ export default function ContactProfile() {
             <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 8 }}>
               Lead Profile
             </Eyebrow>
-            <DisplayHeading size={36} style={{ marginBottom: 8 }}>
+            <DisplayHeading
+              size={isMobile ? 26 : 36}
+              style={{ marginBottom: 8, wordBreak: 'break-word' }}>
               {fullName}
             </DisplayHeading>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              gap: isMobile ? 10 : 14,
+              flexWrap: 'wrap', marginTop: 12,
+            }}>
               <span style={{
                 background: `${TAG_COLORS[tag]}1f`,
                 color: TAG_COLORS[tag],
@@ -361,7 +400,7 @@ export default function ContactProfile() {
         </div>
 
         {/* Tag selector */}
-        <SectionCard title="Call Status" style={{ marginBottom: 24 }}>
+        <SectionCard title="Call Status" style={{ marginBottom: isMobile ? 16 : 24 }}>
           <div style={{ padding: '18px 18px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {TAGS.map(t => {
               const isActive = tag === t
@@ -399,14 +438,18 @@ export default function ContactProfile() {
         {/* Two-column grid: Contact + Survey */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-          gap: 16, marginBottom: 24,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: isMobile ? 12 : 16,
+          marginBottom: isMobile ? 16 : 24,
         }}>
           <SectionCard title="Contact Info">
             <FieldRow label="First Name" value={firstName} />
             <FieldRow label="Last Name"  value={lastName} />
-            <FieldRow label="Email"      value={email} copyable />
-            <FieldRow label="Phone"      value={phone} copyable />
+            <FieldRow label="Email"      value={email} copyable
+              actionHref={email ? `mailto:${email}` : null} />
+            <FieldRow label="Phone"      value={phone} copyable
+              displayValue={phone ? formatPhone(phone) : null}
+              actionHref={phone ? `tel:${phoneHref(phone)}` : null} />
             <FieldRow label="Country"    value={country} />
           </SectionCard>
 

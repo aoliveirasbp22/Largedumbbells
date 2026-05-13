@@ -7,6 +7,7 @@ import {
   TAG_COLORS,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket,
+  useIsMobile,
 } from '@/lib/brand'
 
 function timeAgo(dateStr) {
@@ -44,6 +45,7 @@ function StatCell({ value, label, color, last }) {
 }
 
 export default function EmailAutomation() {
+  const isMobile = useIsMobile()
   const [campaigns, setCampaigns] = useState([])
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
@@ -115,25 +117,34 @@ export default function EmailAutomation() {
         pageLabel="Email Automation"
         leftSlot={
           <Link href="/calls" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← Outreach Pipeline</BrandButton>
+            <BrandButton variant="ghost" size="sm">
+              {isMobile ? '← Pipeline' : '← Outreach Pipeline'}
+            </BrandButton>
           </Link>
         }
-        rightSlot={<div style={{ minWidth: 180 }} />}
+        rightSlot={<div style={{ minWidth: isMobile ? 0 : 180 }} />}
       />
 
-      <div style={{ padding: '32px 24px', maxWidth: 1280, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '20px 14px' : '32px 24px',
+        maxWidth: 1280, margin: '0 auto',
+      }}>
 
         {/* Title + Create */}
         <div style={{
-          display: 'flex', justifyContent: 'space-between',
-          alignItems: 'flex-end', marginBottom: 28,
-          flexWrap: 'wrap', gap: 16,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'stretch' : 'flex-end',
+          marginBottom: isMobile ? 18 : 28,
+          flexWrap: 'wrap',
+          gap: isMobile ? 18 : 16,
+          flexDirection: isMobile ? 'column' : 'row',
         }}>
           <div>
             <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
               Lead Nurture
             </Eyebrow>
-            <DisplayHeading size={38} style={{ marginBottom: 12 }}>
+            <DisplayHeading size={isMobile ? 30 : 38} style={{ marginBottom: 12 }}>
               Campaigns
             </DisplayHeading>
             <GoldRule width={40} />
@@ -147,11 +158,20 @@ export default function EmailAutomation() {
           </div>
 
           {!creating ? (
-            <BrandButton variant="solid" size="md" onClick={() => setCreating(true)}>
+            <BrandButton
+              variant="solid"
+              size="md"
+              onClick={() => setCreating(true)}
+              style={isMobile ? { width: '100%' } : {}}>
               + Create Campaign
             </BrandButton>
           ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              flexDirection: isMobile ? 'column' : 'row',
+              width: isMobile ? '100%' : 'auto',
+            }}>
               <input autoFocus value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') createCampaign() }}
@@ -164,7 +184,8 @@ export default function EmailAutomation() {
                   fontSize: 11,
                   letterSpacing: '0.15em',
                   fontFamily: FONT_BODY,
-                  minWidth: 260,
+                  minWidth: isMobile ? 0 : 260,
+                  width: isMobile ? '100%' : 'auto',
                   outline: 'none',
                 }}
                 onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
@@ -212,7 +233,7 @@ export default function EmailAutomation() {
                     position: 'relative',
                     background: BRAND.bgCard,
                     border: `1px solid ${BRAND.border}`,
-                    padding: '20px 24px',
+                    padding: isMobile ? '16px 14px' : '20px 24px',
                     transition: 'border-color 0.2s',
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = BRAND.borderGold }}
@@ -224,7 +245,14 @@ export default function EmailAutomation() {
                   <CornerBracket position="br" size={14} />
 
                   {/* Top row: name + status + meta */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    gap: isMobile ? 10 : 14,
+                    marginBottom: isMobile ? 12 : 16,
+                    flexWrap: 'wrap',
+                    flexDirection: isMobile ? 'column' : 'row',
+                  }}>
                     <Link href={`/email-automation/${c.id}`}
                       style={{
                         fontFamily: FONT_DISPLAY,
@@ -278,11 +306,14 @@ export default function EmailAutomation() {
 
                     {/* Trigger + Created meta */}
                     <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: isMobile ? 8 : 10,
                       fontSize: 10, color: BRAND.textMuted,
                       fontFamily: FONT_BODY,
                       letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
-                      marginLeft: 'auto',
+                      marginLeft: isMobile ? 0 : 'auto',
+                      flexWrap: 'wrap',
                     }}>
                       {c.trigger_tag ? (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -306,15 +337,20 @@ export default function EmailAutomation() {
 
                   {/* Bottom row: stats + actions */}
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: 18,
+                    display: 'flex',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    gap: isMobile ? 12 : 18,
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
+                    flexDirection: isMobile ? 'column' : 'row',
                   }}>
                     {/* Stat ribbon */}
                     <div style={{
                       display: 'flex',
                       background: BRAND.bgRaised,
                       border: `1px solid ${BRAND.border}`,
+                      width: isMobile ? '100%' : 'auto',
+                      justifyContent: isMobile ? 'space-around' : 'flex-start',
                     }}>
                       <StatCell value={cs.enrolled}  label="Enrolled"  color={BRAND.gold} />
                       <StatCell value={cs.booked}    label="Booked"    color={BRAND.statusBooked} />
@@ -322,21 +358,34 @@ export default function EmailAutomation() {
                     </div>
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <Link href={`/email-automation/${c.id}/enrolled`} style={{ textDecoration: 'none' }}>
+                    <div style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      width: isMobile ? '100%' : 'auto',
+                    }}>
+                      <Link href={`/email-automation/${c.id}/enrolled`} style={{ textDecoration: 'none', flex: isMobile ? 1 : 'initial' }}>
                         <BrandButton
                           variant="ghost"
                           size="sm"
-                          style={{ color: BRAND.statusNew, borderColor: 'rgba(74,144,217,0.33)' }}>
-                          Enrollment Stats
+                          style={{
+                            color: BRAND.statusNew,
+                            borderColor: 'rgba(74,144,217,0.33)',
+                            width: isMobile ? '100%' : 'auto',
+                          }}>
+                          {isMobile ? 'Stats' : 'Enrollment Stats'}
                         </BrandButton>
                       </Link>
-                      <Link href={`/email-automation/${c.id}`} style={{ textDecoration: 'none' }}>
-                        <BrandButton variant="primary" size="sm">
+                      <Link href={`/email-automation/${c.id}`} style={{ textDecoration: 'none', flex: isMobile ? 1 : 'initial' }}>
+                        <BrandButton variant="primary" size="sm" style={{ width: isMobile ? '100%' : 'auto' }}>
                           Edit →
                         </BrandButton>
                       </Link>
-                      <BrandButton variant="danger" size="sm" onClick={() => deleteCampaign(c.id)}>
+                      <BrandButton
+                        variant="danger"
+                        size="sm"
+                        onClick={() => deleteCampaign(c.id)}
+                        style={{ flex: isMobile ? 1 : 'initial' }}>
                         Delete
                       </BrandButton>
                     </div>

@@ -8,6 +8,7 @@ import {
   TAG_COLORS,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket,
+  useIsMobile,
 } from '@/lib/brand'
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
@@ -374,7 +375,7 @@ function AttachmentsField({ attachments, onChange }) {
 }
 
 // ─── Step node ────────────────────────────────────────────────────────────
-function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, dragHandlers, isDragging }) {
+function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown, dragHandlers, isDragging, isMobile }) {
   const type = STEP_TYPES[step.type]
 
   return (
@@ -384,7 +385,7 @@ function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
         background: BRAND.bgCard,
         border: `1px solid ${isDragging ? BRAND.gold : BRAND.border}`,
         opacity: isDragging ? 0.5 : 1,
-        cursor: 'grab',
+        cursor: isMobile ? 'default' : 'grab',
         transition: 'border-color 0.15s',
       }}>
       <CornerBracket position="tl" size={12} />
@@ -393,65 +394,125 @@ function StepNode({ step, index, total, onUpdate, onDelete, onMoveUp, onMoveDown
       <CornerBracket position="br" size={12} />
 
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: 16, borderBottom: `1px solid ${BRAND.border}`,
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        justifyContent: 'space-between',
+        gap: isMobile ? 10 : 0,
+        padding: isMobile ? 12 : 16,
+        borderBottom: `1px solid ${BRAND.border}`,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-          <span style={{ color: BRAND.textDim, fontSize: 14, flexShrink: 0 }}>⋮⋮</span>
-          <div style={{
-            width: 28, height: 28, borderRadius: 999, flexShrink: 0,
-            background: 'transparent', color: type.color,
-            border: `1px solid ${type.color}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: FONT_DISPLAY,
-            fontSize: 13, fontWeight: 400,
-            letterSpacing: '0.02em',
-          }}>{index + 1}</div>
-          <Eyebrow color={type.color} style={{ fontSize: 10, letterSpacing: '0.25em' }}>
-            {type.label}
-          </Eyebrow>
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          gap: 10,
+          flex: 1, minWidth: 0,
+          justifyContent: isMobile ? 'space-between' : 'flex-start',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {!isMobile && <span style={{ color: BRAND.textDim, fontSize: 14, flexShrink: 0 }}>⋮⋮</span>}
+            <div style={{
+              width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+              background: 'transparent', color: type.color,
+              border: `1px solid ${type.color}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: FONT_DISPLAY,
+              fontSize: 13, fontWeight: 400,
+              letterSpacing: '0.02em',
+            }}>{index + 1}</div>
+            <Eyebrow color={type.color} style={{ fontSize: 10, letterSpacing: '0.25em', whiteSpace: 'nowrap' }}>
+              {type.label}
+            </Eyebrow>
+          </div>
+          {!isMobile && (
+            <input
+              value={step.name || ''}
+              onChange={e => onUpdate({ ...step, name: e.target.value })}
+              placeholder="Name this step…"
+              style={{
+                background: 'transparent', border: '1px solid transparent', outline: 'none',
+                fontSize: 13, fontWeight: 500, color: BRAND.textPrimary,
+                padding: '6px 10px',
+                flex: 1, minWidth: 0, maxWidth: 400,
+                fontFamily: FONT_BODY,
+                letterSpacing: '0.01em',
+                transition: 'all 0.15s',
+              }}
+              onMouseDown={e => e.stopPropagation()}
+              onFocus={e => { e.target.style.background = BRAND.bgInput; e.target.style.borderColor = BRAND.borderGoldStrong }}
+              onBlur={e => { e.target.style.background = 'transparent'; e.target.style.borderColor = 'transparent' }}
+            />
+          )}
+          {isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <button onClick={onMoveUp} disabled={index === 0}
+                style={{
+                  background: 'transparent', border: `1px solid ${BRAND.border}`,
+                  color: index === 0 ? BRAND.textDim : BRAND.textSecondary,
+                  cursor: index === 0 ? 'not-allowed' : 'pointer',
+                  padding: '6px 12px', fontSize: 14,
+                }}>↑</button>
+              <button onClick={onMoveDown} disabled={index === total - 1}
+                style={{
+                  background: 'transparent', border: `1px solid ${BRAND.border}`,
+                  color: index === total - 1 ? BRAND.textDim : BRAND.textSecondary,
+                  cursor: index === total - 1 ? 'not-allowed' : 'pointer',
+                  padding: '6px 12px', fontSize: 14,
+                }}>↓</button>
+              <button onClick={onDelete}
+                style={{
+                  background: 'transparent', border: `1px solid ${BRAND.border}`,
+                  color: BRAND.statusDisqualified,
+                  cursor: 'pointer', padding: '6px 12px', fontSize: 14,
+                }}>✕</button>
+            </div>
+          )}
+        </div>
+        {isMobile && (
           <input
             value={step.name || ''}
             onChange={e => onUpdate({ ...step, name: e.target.value })}
             placeholder="Name this step…"
             style={{
-              background: 'transparent', border: '1px solid transparent', outline: 'none',
-              fontSize: 13, fontWeight: 500, color: BRAND.textPrimary,
-              padding: '6px 10px',
-              flex: 1, minWidth: 0, maxWidth: 400,
+              background: BRAND.bgInput,
+              color: BRAND.textPrimary,
+              border: `1px solid ${BRAND.border}`,
+              padding: '9px 12px',
+              fontSize: 13, fontWeight: 500,
+              outline: 'none',
               fontFamily: FONT_BODY,
               letterSpacing: '0.01em',
-              transition: 'all 0.15s',
+              width: '100%',
             }}
-            onMouseDown={e => e.stopPropagation()}
-            onFocus={e => { e.target.style.background = BRAND.bgInput; e.target.style.borderColor = BRAND.borderGoldStrong }}
-            onBlur={e => { e.target.style.background = 'transparent'; e.target.style.borderColor = 'transparent' }}
+            onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+            onBlur={e => { e.target.style.borderColor = BRAND.border }}
           />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <button onClick={onMoveUp} disabled={index === 0}
-            style={{
-              background: 'transparent', border: 'none',
-              color: index === 0 ? BRAND.textDim : BRAND.textSecondary,
-              cursor: index === 0 ? 'not-allowed' : 'pointer',
-              padding: '6px 10px', fontSize: 14,
-            }}>↑</button>
-          <button onClick={onMoveDown} disabled={index === total - 1}
-            style={{
-              background: 'transparent', border: 'none',
-              color: index === total - 1 ? BRAND.textDim : BRAND.textSecondary,
-              cursor: index === total - 1 ? 'not-allowed' : 'pointer',
-              padding: '6px 10px', fontSize: 14,
-            }}>↓</button>
-          <button onClick={onDelete}
-            style={{
-              background: 'transparent', border: 'none', color: BRAND.statusDisqualified,
-              cursor: 'pointer', padding: '6px 10px', fontSize: 14,
-            }}>✕</button>
-        </div>
+        )}
+        {!isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            <button onClick={onMoveUp} disabled={index === 0}
+              style={{
+                background: 'transparent', border: 'none',
+                color: index === 0 ? BRAND.textDim : BRAND.textSecondary,
+                cursor: index === 0 ? 'not-allowed' : 'pointer',
+                padding: '6px 10px', fontSize: 14,
+              }}>↑</button>
+            <button onClick={onMoveDown} disabled={index === total - 1}
+              style={{
+                background: 'transparent', border: 'none',
+                color: index === total - 1 ? BRAND.textDim : BRAND.textSecondary,
+                cursor: index === total - 1 ? 'not-allowed' : 'pointer',
+                padding: '6px 10px', fontSize: 14,
+              }}>↓</button>
+            <button onClick={onDelete}
+              style={{
+                background: 'transparent', border: 'none', color: BRAND.statusDisqualified,
+                cursor: 'pointer', padding: '6px 10px', fontSize: 14,
+              }}>✕</button>
+          </div>
+        )}
       </div>
 
-      <div style={{ padding: 20 }}>
+      <div style={{ padding: isMobile ? 14 : 20 }}>
         {step.type === 'email' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
@@ -633,6 +694,7 @@ function StatCell({ value, label, color, last, href }) {
 
 // ─── Main Builder ─────────────────────────────────────────────────────────
 export default function CampaignBuilder() {
+  const isMobile = useIsMobile()
   const params = useParams()
   const id = params.id
 
@@ -785,7 +847,9 @@ export default function CampaignBuilder() {
         pageLabel="Campaign Builder"
         leftSlot={
           <Link href="/email-automation" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← All Campaigns</BrandButton>
+            <BrandButton variant="ghost" size="sm">
+              {isMobile ? '← Campaigns' : '← All Campaigns'}
+            </BrandButton>
           </Link>
         }
         rightSlot={
@@ -820,17 +884,24 @@ export default function CampaignBuilder() {
         }
       />
 
-      <div style={{ padding: '24px 24px 40px', maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '14px 12px 32px' : '24px 24px 40px',
+        maxWidth: 1000, margin: '0 auto',
+      }}>
 
         {/* Title + Stats bar */}
         <div style={{
           position: 'relative',
           background: BRAND.bgCard,
           border: `1px solid ${BRAND.border}`,
-          padding: '20px 24px',
-          marginBottom: 24,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 24, flexWrap: 'wrap',
+          padding: isMobile ? '16px 14px' : '20px 24px',
+          marginBottom: isMobile ? 14 : 24,
+          display: 'flex',
+          alignItems: isMobile ? 'stretch' : 'center',
+          justifyContent: 'space-between',
+          gap: isMobile ? 14 : 24,
+          flexWrap: 'wrap',
+          flexDirection: isMobile ? 'column' : 'row',
         }}>
           <CornerBracket position="tl" size={14} />
           <CornerBracket position="tr" size={14} />
@@ -841,26 +912,38 @@ export default function CampaignBuilder() {
             <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 8 }}>
               Editing Campaign
             </Eyebrow>
-            <DisplayHeading size={26}>
+            <DisplayHeading size={isMobile ? 22 : 26} style={{ wordBreak: 'break-word' }}>
               {campaign.name || 'Untitled'}
             </DisplayHeading>
           </div>
 
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 16,
-            flexWrap: 'wrap', justifyContent: 'flex-end',
+            display: 'flex', alignItems: isMobile ? 'stretch' : 'center',
+            gap: isMobile ? 10 : 16,
+            flexWrap: 'wrap',
+            justifyContent: isMobile ? 'flex-start' : 'flex-end',
+            flexDirection: isMobile ? 'column' : 'row',
           }}>
             <div style={{
               display: 'flex',
               background: BRAND.bgRaised,
               border: `1px solid ${BRAND.border}`,
+              justifyContent: isMobile ? 'space-around' : 'flex-start',
+              width: isMobile ? '100%' : 'auto',
             }}>
               <StatCell value={stats.enrolled}  label="Enrolled"  color={BRAND.gold}          href={`/email-automation/${id}/enrolled`} />
               <StatCell value={stats.booked}    label="Booked"    color={BRAND.statusBooked}  />
               <StatCell value={stats.completed} label="Completed" color={BRAND.textSecondary} last />
             </div>
             <Link href={`/email-automation/${id}/enrolled`} style={{ textDecoration: 'none' }}>
-              <BrandButton variant="ghost" size="sm" style={{ color: BRAND.statusNew, borderColor: 'rgba(74,144,217,0.33)' }}>
+              <BrandButton
+                variant="ghost"
+                size="sm"
+                style={{
+                  color: BRAND.statusNew,
+                  borderColor: 'rgba(74,144,217,0.33)',
+                  width: isMobile ? '100%' : 'auto',
+                }}>
                 Enrollment Details →
               </BrandButton>
             </Link>
@@ -1028,7 +1111,8 @@ export default function CampaignBuilder() {
                   onMoveUp={() => reorderSteps(i, i - 1)}
                   onMoveDown={() => reorderSteps(i, i + 1)}
                   isDragging={dragIndex === i}
-                  dragHandlers={{
+                  isMobile={isMobile}
+                  dragHandlers={isMobile ? {} : {
                     draggable: true,
                     onDragStart: e => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move' },
                     onDragEnd:   () => setDragIndex(null),

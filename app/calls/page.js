@@ -3,11 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   TAG_COLORS,
   Eyebrow, DisplayHeading, PageBackground, PageHeader, BrandButton,
   CornerBracket, GoldRule,
+  formatPhone, phoneHref,
+  useIsMobile,
 } from '@/lib/brand'
 
 const FIELD_IDS = {
@@ -407,6 +410,363 @@ function NotesCell({ contactId, initialNote, onSave }) {
   )
 }
 
+// ─── Mobile filter sheet ──────────────────────────────────────────────
+// Slides up from the bottom on mobile. Shows every filter section grouped.
+function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue, callWindowColors, callWindowLabels, formatCallLabel }) {
+  if (!open) return null
+
+  const sections = [
+    { key: 'callWindow', label: 'Call Window' },
+    { key: 'tag',        label: 'Tag' },
+    { key: 'country',    label: 'Country', searchable: true },
+    { key: 'invest',     label: 'Would Invest' },
+    { key: 'bothered',   label: 'Bothered Score' },
+    { key: 'age',        label: 'Age' },
+  ]
+
+  const [search, setSearch] = useState({})
+  function setSearchFor(key, v) {
+    setSearch(prev => ({ ...prev, [key]: v }))
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.75)',
+        zIndex: 200,
+        display: 'flex', alignItems: 'flex-end',
+      }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: BRAND.bg,
+          borderTop: `1px solid ${BRAND.borderGoldStrong}`,
+          width: '100%',
+          maxHeight: '85vh',
+          overflowY: 'auto',
+          position: 'relative',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.8)',
+        }}>
+        <CornerBracket position="tl" size={14} />
+        <CornerBracket position="tr" size={14} />
+
+        {/* Header */}
+        <div style={{
+          padding: '18px 20px',
+          borderBottom: `1px solid ${BRAND.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          position: 'sticky', top: 0,
+          background: BRAND.bg,
+          zIndex: 1,
+        }}>
+          <div>
+            <Eyebrow style={{ fontSize: 10, letterSpacing: '0.3em', marginBottom: 6 }}>Filters</Eyebrow>
+            <GoldRule width={24} />
+          </div>
+          <button onClick={onClose}
+            style={{
+              background: 'transparent', border: `1px solid ${BRAND.border}`,
+              color: BRAND.textSecondary,
+              padding: '6px 12px', fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              fontFamily: FONT_BODY, cursor: 'pointer',
+            }}>Close ✕</button>
+        </div>
+
+        {/* Sections */}
+        <div style={{ padding: '12px 16px 24px' }}>
+          {sections.map(section => {
+            const opts = filterOptions[section.key] || []
+            const selected = filters[section.key] || []
+            const sectionSearch = search[section.key] || ''
+            const filtered = section.searchable && sectionSearch
+              ? opts.filter(o => String(o).toLowerCase().includes(sectionSearch.toLowerCase()))
+              : opts
+
+            return (
+              <div key={section.key} style={{
+                marginBottom: 18,
+                paddingBottom: 18,
+                borderBottom: `1px solid ${BRAND.border}`,
+              }}>
+                <Eyebrow color={BRAND.textSecondary} style={{
+                  fontSize: 9, letterSpacing: '0.3em', marginBottom: 10,
+                }}>
+                  {section.label}{selected.length > 0 ? ` (${selected.length})` : ''}
+                </Eyebrow>
+
+                {section.searchable && opts.length > 10 && (
+                  <input
+                    value={sectionSearch}
+                    onChange={e => setSearchFor(section.key, e.target.value)}
+                    placeholder={`SEARCH ${section.label.toUpperCase()}…`}
+                    style={{
+                      width: '100%',
+                      background: BRAND.bgCard,
+                      color: BRAND.textPrimary,
+                      border: `1px solid ${BRAND.border}`,
+                      padding: '8px 12px',
+                      fontSize: 10, letterSpacing: '0.12em',
+                      fontFamily: FONT_BODY,
+                      marginBottom: 8,
+                      outline: 'none',
+                    }}
+                  />
+                )}
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {filtered.map(opt => {
+                    const isChecked = selected.includes(opt)
+                    const isCallWindow = section.key === 'callWindow'
+                    const swatchColor = isCallWindow ? callWindowColors[opt] : null
+                    const label = isCallWindow ? callWindowLabels[opt] : opt
+
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => toggleFilterValue(section.key, opt)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          background: isChecked ? 'rgba(176, 131, 74, 0.13)' : 'transparent',
+                          color: isChecked ? BRAND.gold : BRAND.textSecondary,
+                          border: `1px solid ${isChecked ? BRAND.borderGoldStrong : BRAND.border}`,
+                          padding: '6px 11px',
+                          fontSize: 10, fontWeight: 700,
+                          letterSpacing: '0.15em', textTransform: 'uppercase',
+                          fontFamily: FONT_BODY,
+                          cursor: 'pointer',
+                        }}>
+                        {swatchColor && (
+                          <span style={{
+                            display: 'inline-block',
+                            width: 6, height: 6, borderRadius: 999,
+                            background: swatchColor,
+                            boxShadow: `0 0 6px ${swatchColor}99`,
+                          }} />
+                        )}
+                        <span>{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Mobile contact card ──────────────────────────────────────────────
+function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef, getField, getCountryName, fieldIds, callLogs, router }) {
+  const cf = contact.customFields || []
+  const struggle = getField(cf, fieldIds.struggle)
+  const invest   = getField(cf, fieldIds.invest)
+  const bothered = getField(cf, fieldIds.bothered)
+  const age      = getField(cf, fieldIds.age)
+  const country  = getCountryName(contact.country)
+
+  function goToProfile(e) {
+    // Skip if user tapped an interactive child (links, selects, buttons)
+    const t = e.target
+    if (t.closest('a, select, button')) return
+    router.push(`/calls/${contact.id}`)
+  }
+
+  return (
+    <div
+      onClick={goToProfile}
+      ref={contactRef}
+      style={{
+        position: 'relative',
+        background: BRAND.bgCard,
+        border: `1px solid ${urgent ? BRAND.gold : BRAND.border}`,
+        boxShadow: urgent ? `0 0 16px ${BRAND.goldFaint}` : 'none',
+        padding: '14px 16px',
+        display: 'flex', flexDirection: 'column', gap: 10,
+        cursor: 'pointer',
+        transition: 'border-color 0.2s',
+      }}>
+      <CornerBracket position="tl" size={10} />
+      <CornerBracket position="tr" size={10} />
+      <CornerBracket position="bl" size={10} />
+      <CornerBracket position="br" size={10} />
+
+      {/* Top row: avatar + name + tag */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 999, flexShrink: 0,
+          background: urgent ? 'rgba(176, 131, 74, 0.18)' : 'transparent',
+          color: BRAND.gold,
+          border: `1px solid ${urgent ? BRAND.gold : BRAND.borderGold}`,
+          boxShadow: urgent ? `0 0 10px ${BRAND.goldGlow}` : 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, fontWeight: 700, fontFamily: FONT_BODY,
+        }}>
+          {(contact.contactName || '?')[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            fontSize: 14, fontWeight: 600,
+            color: urgent ? BRAND.gold : BRAND.textPrimary,
+            textShadow: urgent ? `0 0 12px ${BRAND.goldGlow}` : 'none',
+            fontFamily: FONT_BODY,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            letterSpacing: '0.01em',
+          }}>
+            {contact.contactName || 'Unknown'}
+          </p>
+        </div>
+        <select
+          value={tag}
+          onClick={e => { e.stopPropagation(); e.preventDefault() }}
+          onChange={e => { e.stopPropagation(); e.preventDefault(); onTagChange(contact.id, e.target.value) }}
+          style={{
+            fontSize: 9, fontWeight: 700,
+            letterSpacing: '0.15em', textTransform: 'uppercase',
+            padding: '4px 6px',
+            background: `${TAG_COLORS[tag]}1f`,
+            color: TAG_COLORS[tag],
+            border: `1px solid ${TAG_COLORS[tag]}55`,
+            fontFamily: FONT_BODY,
+            outline: 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+            maxWidth: 130,
+          }}>
+          {['uncalled','called once','called twice','called three times','call back','not interested','booked'].map(t => (
+            <option key={t} value={t} style={{ background: BRAND.bgRaised, color: TAG_COLORS[t] }}>{t}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Key info row: age, country, local time */}
+      <MobileLocalTimeRow phone={contact.phone} country={country} age={age} />
+
+      {/* Struggle */}
+      {struggle && struggle !== '—' && (
+        <p style={{
+          fontSize: 11, color: BRAND.textSecondary,
+          fontFamily: FONT_BODY,
+          lineHeight: 1.5, letterSpacing: '0.01em',
+        }}>
+          {struggle}
+        </p>
+      )}
+
+      {/* Bothered + invest line */}
+      {(bothered !== '—' || (invest && invest !== '—')) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+          fontSize: 10,
+          fontFamily: FONT_BODY,
+          letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+        }}>
+          {bothered !== '—' && (
+            <span style={{ color: BRAND.textMuted }}>
+              Bothered <span style={{ color: BRAND.gold, fontWeight: 700 }}>{bothered}/5</span>
+            </span>
+          )}
+          {bothered !== '—' && invest && invest !== '—' && (
+            <span style={{ color: BRAND.textDim }}>·</span>
+          )}
+          {invest && invest !== '—' && (
+            <span style={{
+              color: BRAND.textMuted,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 220,
+            }}>{invest}</span>
+          )}
+        </div>
+      )}
+
+      {/* Phone row */}
+      {contact.phone && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          paddingTop: 8,
+          borderTop: `1px solid ${BRAND.border}`,
+        }}>
+          <a
+            href={`tel:${phoneHref(contact.phone)}`}
+            onClick={e => e.stopPropagation()}
+            style={{
+              flex: 1,
+              fontSize: 12, color: BRAND.gold,
+              fontFamily: FONT_BODY,
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '0.02em',
+              textDecoration: 'none',
+            }}>
+            {formatPhone(contact.phone)}
+          </a>
+          <a
+            href={`tel:${phoneHref(contact.phone)}`}
+            onClick={e => e.stopPropagation()}
+            style={{
+              padding: '6px 12px',
+              fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              color: BRAND.gold,
+              background: 'rgba(176, 131, 74, 0.13)',
+              border: `1px solid ${BRAND.borderGoldStrong}`,
+              fontFamily: FONT_BODY,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}>
+            Call
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Mobile-friendly local time + age + country row (one inline line)
+function MobileLocalTimeRow({ phone, country, age }) {
+  const [info, setInfo] = useState(null)
+  useEffect(() => {
+    if (!phone) { setInfo(null); return }
+    const tz = getTimezoneFromPhone(phone)
+    if (!tz) { setInfo(null); return }
+    const update = () => setInfo(getLocalTimeInfo(tz))
+    update()
+    const id = setInterval(update, 30000)
+    return () => clearInterval(id)
+  }, [phone])
+
+  const parts = []
+  if (age && age !== '—') parts.push(`${age}Y`)
+  if (country && country !== '—') parts.push(country)
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontSize: 10,
+      fontFamily: FONT_BODY,
+      letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+      color: BRAND.textMuted,
+    }}>
+      {info && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+            background: DOT_COLORS[info.color],
+            boxShadow: `0 0 6px ${DOT_COLORS[info.color]}99`,
+          }} />
+          <span style={{ color: BRAND.textSecondary, fontVariantNumeric: 'tabular-nums' }}>{info.time}</span>
+          <span style={{ color: BRAND.textDim }}>{info.tz}</span>
+        </span>
+      )}
+      {info && parts.length > 0 && <span style={{ color: BRAND.textDim }}>·</span>}
+      {parts.length > 0 && <span>{parts.join(' · ')}</span>}
+    </div>
+  )
+}
+
 function getCountryName(code) {
   if (!code) return '—'
   if (code.length > 2) return code
@@ -437,6 +797,8 @@ function formatCreated(dateStr) {
 }
 
 export default function Calls() {
+  const isMobile = useIsMobile()
+  const router = useRouter()
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({})
   const [loading, setLoading] = useState(true)
@@ -452,6 +814,7 @@ export default function Calls() {
     country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [],
   })
   const [openFilter, setOpenFilter] = useState(null)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   function toggleFilterValue(column, value) {
     setFilters(prev => {
@@ -711,21 +1074,36 @@ export default function Calls() {
         pageLabel="Outreach Pipeline"
         leftSlot={
           <Link href="/" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="ghost" size="sm">← Home</BrandButton>
+            <BrandButton variant="ghost" size="sm">
+              {isMobile ? '←' : '← Home'}
+            </BrandButton>
           </Link>
         }
         rightSlot={
           <Link href="/email-automation" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="solid" size="sm">Email Automation →</BrandButton>
+            <BrandButton variant="solid" size="sm">
+              {isMobile ? 'Email →' : 'Email Automation →'}
+            </BrandButton>
           </Link>
         }
       />
 
-      <div style={{ padding: '24px 32px', maxWidth: 1600, margin: '0 auto' }}>
+      <div style={{
+        padding: isMobile ? '16px 12px' : '24px 32px',
+        maxWidth: 1600, margin: '0 auto',
+      }}>
 
         {/* Timeframe + range note */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}` }}>
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: isMobile ? 'center' : 'space-between',
+          marginBottom: isMobile ? 14 : 20,
+        }}>
+          <div style={{
+            display: 'flex', gap: 0,
+            border: `1px solid ${BRAND.border}`,
+            width: isMobile ? '100%' : 'auto',
+          }}>
             {['daily','weekly','monthly'].map((t, i) => {
               const active = timeframe === t
               return (
@@ -735,18 +1113,21 @@ export default function Calls() {
                     color: active ? '#000' : BRAND.textMuted,
                     border: 'none',
                     borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
-                    padding: '6px 16px',
+                    padding: isMobile ? '8px 12px' : '6px 16px',
                     fontSize: 10, fontWeight: 700,
                     letterSpacing: '0.2em', textTransform: 'uppercase',
                     fontFamily: FONT_BODY,
                     cursor: 'pointer',
+                    flex: isMobile ? 1 : 'initial',
                   }}>{t}</button>
               )
             })}
           </div>
-          <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
-            Contacts Added {timeframe === 'daily' ? 'Today' : timeframe === 'weekly' ? 'This Week' : 'This Month'}
-          </Eyebrow>
+          {!isMobile && (
+            <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
+              Contacts Added {timeframe === 'daily' ? 'Today' : timeframe === 'weekly' ? 'This Week' : 'This Month'}
+            </Eyebrow>
+          )}
         </div>
 
         {/* Stats ribbon */}
@@ -754,9 +1135,9 @@ export default function Calls() {
           position: 'relative',
           background: BRAND.bgCard,
           border: `1px solid ${BRAND.border}`,
-          marginBottom: 24,
+          marginBottom: isMobile ? 14 : 24,
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
           gap: 1,
         }}>
           <CornerBracket position="tl" size={14} />
@@ -772,7 +1153,7 @@ export default function Calls() {
           ].map((stat, idx) => (
             <div key={stat.label} style={{
               background: BRAND.bgRaised,
-              padding: '18px 22px',
+              padding: isMobile ? '14px 16px' : '18px 22px',
               position: 'relative',
               overflow: 'hidden',
             }}>
@@ -783,7 +1164,7 @@ export default function Calls() {
               }} />
               <p style={{
                 fontFamily: FONT_DISPLAY,
-                fontSize: 32, fontWeight: 400,
+                fontSize: isMobile ? 26 : 32, fontWeight: 400,
                 color: stat.color, lineHeight: 1,
                 letterSpacing: '0.02em',
                 fontVariantNumeric: 'tabular-nums',
@@ -797,11 +1178,19 @@ export default function Calls() {
         </div>
 
         {/* Search / Sort / Clear */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: isMobile ? 'stretch' : 'center',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 8 : 12,
+          marginBottom: isMobile ? 12 : 16,
+          flexWrap: 'wrap',
+        }}>
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
             placeholder="SEARCH NAME, EMAIL, PHONE…"
             style={{
-              flex: 1, minWidth: 240,
+              flex: 1, minWidth: isMobile ? 0 : 240,
+              width: isMobile ? '100%' : 'auto',
               background: BRAND.bgCard, color: BRAND.textPrimary,
               border: `1px solid ${BRAND.border}`,
               padding: '10px 14px',
@@ -818,12 +1207,30 @@ export default function Calls() {
               fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase',
               fontFamily: FONT_BODY, outline: 'none',
               cursor: 'pointer',
+              width: isMobile ? '100%' : 'auto',
             }}>
             <option value="created">Sort: Newest</option>
             <option value="name">Sort: Name</option>
             <option value="country">Sort: Country</option>
             <option value="last_contacted">Sort: Last Contacted</option>
           </select>
+          {isMobile && (
+            <button onClick={() => setFilterSheetOpen(true)}
+              style={{
+                background: activeFilterCount > 0 ? 'rgba(176, 131, 74, 0.13)' : 'transparent',
+                color: activeFilterCount > 0 ? BRAND.gold : BRAND.textSecondary,
+                border: `1px solid ${activeFilterCount > 0 ? BRAND.borderGoldStrong : BRAND.border}`,
+                padding: '10px 14px',
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                fontFamily: FONT_BODY,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%',
+              }}>
+              ▾ Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+            </button>
+          )}
           {activeFilterCount > 0 && (
             <button onClick={clearAllFilters}
               style={{
@@ -835,7 +1242,8 @@ export default function Calls() {
                 letterSpacing: '0.2em', textTransform: 'uppercase',
                 fontFamily: FONT_BODY,
                 cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: isMobile ? '100%' : 'auto',
               }}>
               Clear Filters ({activeFilterCount}) ✕
             </button>
@@ -844,6 +1252,114 @@ export default function Calls() {
 
         {loading ? (
           <Eyebrow color={BRAND.textDim}>Loading contacts...</Eyebrow>
+        ) : isMobile ? (
+          <>
+            {/* Mobile contact card list */}
+            {paginated.length === 0 ? (
+              <div style={{
+                padding: 32, textAlign: 'center',
+                background: BRAND.bgCard,
+                border: `1px solid ${BRAND.border}`,
+              }}>
+                <Eyebrow color={BRAND.textDim} style={{ fontSize: 10, letterSpacing: '0.25em' }}>
+                  No Contacts Found For This Timeframe
+                </Eyebrow>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {paginated.map(contact => {
+                  const log = callLogs[contact.id]
+                  const tag = log?.tag || 'uncalled'
+                  const urgent = needsCall(tag, log?.last_contacted)
+                  return (
+                    <MobileContactCard
+                      key={contact.id}
+                      contact={contact}
+                      log={log}
+                      tag={tag}
+                      urgent={urgent}
+                      onTagChange={updateTag}
+                      getField={getField}
+                      getCountryName={getCountryName}
+                      fieldIds={FIELD_IDS}
+                      callLogs={callLogs}
+                      router={router}
+                    />
+                  )
+                })}
+              </div>
+            )}
+
+            <FilterSheet
+              open={filterSheetOpen}
+              onClose={() => setFilterSheetOpen(false)}
+              filters={filters}
+              filterOptions={filterOptions}
+              toggleFilterValue={toggleFilterValue}
+              callWindowColors={callWindowColors}
+              callWindowLabels={callWindowLabels}
+            />
+
+            {/* Pagination */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginTop: 16, gap: 12, flexWrap: 'wrap',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>Per Page</Eyebrow>
+                <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}` }}>
+                  {[20, 50].map((n, i) => {
+                    const active = perPage === n
+                    return (
+                      <button key={n} onClick={() => { setPerPage(n); setPage(1) }}
+                        style={{
+                          background: active ? BRAND.gold : 'transparent',
+                          color: active ? '#000' : BRAND.textMuted,
+                          border: 'none',
+                          borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                          padding: '5px 12px',
+                          fontSize: 10, fontWeight: 700,
+                          letterSpacing: '0.1em',
+                          fontFamily: FONT_BODY,
+                          cursor: 'pointer',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>{n}</button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  fontSize: 10, color: BRAND.textDim,
+                  letterSpacing: '0.15em', fontWeight: 600,
+                  fontFamily: FONT_BODY, textTransform: 'uppercase',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {filtered.length === 0 ? '0' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, filtered.length)}`} of {filtered.length}
+                </span>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                  style={{
+                    background: BRAND.bgRaised,
+                    color: page === 1 ? BRAND.textDim : BRAND.textSecondary,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    cursor: page === 1 ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT_BODY,
+                  }}>←</button>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || totalPages === 0}
+                  style={{
+                    background: BRAND.bgRaised,
+                    color: (page === totalPages || totalPages === 0) ? BRAND.textDim : BRAND.textSecondary,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    cursor: (page === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT_BODY,
+                  }}>→</button>
+              </div>
+            </div>
+          </>
         ) : (
           <>
             {/* Table */}
@@ -922,7 +1438,10 @@ export default function Calls() {
                     const tag = log?.tag || 'uncalled'
                     const cf = contact.customFields || []
                     const isSelected = selectedRow === contact.id
-                    const rowBg = isSelected ? 'rgba(176, 131, 74, 0.07)' : i % 2 === 0 ? BRAND.bgCard : BRAND.bgRaised
+                    const baseRowBg = i % 2 === 0 ? BRAND.bgCard : BRAND.bgRaised
+                    // Selected: solid raised background tinted with gold flat, NOT translucent
+                    // (translucent caused the sticky name cell to bleed through over scroll)
+                    const rowBg = isSelected ? '#1a160f' : baseRowBg
                     const urgent = needsCall(tag, log?.last_contacted)
                     return (
                       <tr key={contact.id}
@@ -988,7 +1507,24 @@ export default function Calls() {
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{contact.phone || '—'}</span>
+                            {contact.phone ? (
+                              <a href={`tel:${phoneHref(contact.phone)}`}
+                                onClick={e => e.stopPropagation()}
+                                style={{
+                                  whiteSpace: 'nowrap',
+                                  fontSize: 11,
+                                  color: BRAND.gold,
+                                  textDecoration: 'none',
+                                  borderBottom: '1px dotted transparent',
+                                  transition: 'border-color 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.borderBottomColor = BRAND.gold }}
+                                onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}>
+                                {formatPhone(contact.phone)}
+                              </a>
+                            ) : (
+                              <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>—</span>
+                            )}
                             {contact.phone && (
                               <div style={{ position: 'relative', display: 'inline-flex' }}>
                                 <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.phone, `phone-${contact.id}`) }}
@@ -1160,28 +1696,38 @@ export default function Calls() {
               </div>
             </div>
 
-            {/* Legend */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 16 }}>
-              <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.25em' }}>Call Window</Eyebrow>
-              {[
-                { color: BRAND.statusBooked,       label: 'Good To Call (6–8pm · Wknd 11am–8pm)' },
-                { color: BRAND.statusQualifying,   label: 'Within 30 Min' },
-                { color: BRAND.statusDisqualified, label: 'Outside Window' },
-              ].map(({ color, label }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: 999, flexShrink: 0,
-                    background: color,
-                    boxShadow: `0 0 6px ${color}99`,
-                  }} />
-                  <span style={{
-                    fontSize: 10, color: BRAND.textMuted,
-                    fontFamily: FONT_BODY,
-                    letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
-                  }}>{label}</span>
+            {/* Legend (desktop only) */}
+            {!isMobile && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 18,
+                marginTop: 16,
+                flexWrap: 'wrap',
+              }}>
+                <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.25em' }}>Call Window</Eyebrow>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
+                  {[
+                    { color: BRAND.statusBooked,       label: 'Good To Call (6–8pm · Wknd 11am–8pm)' },
+                    { color: BRAND.statusQualifying,   label: 'Within 30 Min' },
+                    { color: BRAND.statusDisqualified, label: 'Outside Window' },
+                  ].map(({ color, label }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+                        background: color,
+                        boxShadow: `0 0 6px ${color}99`,
+                      }} />
+                      <span style={{
+                        fontSize: 10, color: BRAND.textMuted,
+                        fontFamily: FONT_BODY,
+                        letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+                      }}>{label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </>
         )}
       </div>
