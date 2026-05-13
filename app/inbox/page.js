@@ -281,8 +281,28 @@ function InboxFilterSheet({ open, onClose, filter, setFilter, pinnedCount }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────
+function useVisualViewportHeight() {
+  // Returns the current usable viewport height (in px),
+  // shrinking when the iOS keyboard appears.
+  const [h, setH] = useState(typeof window !== 'undefined' ? window.innerHeight : 0)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return
+    const vv = window.visualViewport
+    const update = () => setH(vv.height)
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+  return h
+}
+
 export default function DMInbox() {
   const isMobile = useIsMobile()
+  const vvHeight = useVisualViewportHeight()
   const [leads,        setLeads]        = useState([])
   const [leadMessages, setLeadMessages] = useState({})
   const [selectedLead, setSelectedLead] = useState(null)
@@ -840,9 +860,13 @@ export default function DMInbox() {
 
         {/* ── Main message panel ── */}
         <div style={isMobile && selectedLead ? {
-          // Mobile + lead selected: take over the full viewport
+          // Mobile + lead selected: take over the visible viewport.
+          // Using visualViewport.height makes the panel shrink to fit
+          // above the iOS keyboard when it slides up, so the reply box
+          // stays anchored just above the keyboard instead of jumping.
           position: 'fixed',
-          inset: 0,
+          top: 0, left: 0, right: 0,
+          height: vvHeight ? `${vvHeight}px` : '100dvh',
           background: BRAND.bg,
           display: 'flex',
           flexDirection: 'column',
