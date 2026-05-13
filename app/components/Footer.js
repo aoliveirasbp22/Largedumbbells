@@ -1,6 +1,17 @@
 'use client'
+import { useEffect, useState } from 'react'
 
 export default function Footer() {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  if (isMobile) return null
+
   return (
     <footer style={{
       padding: '24px 16px',
