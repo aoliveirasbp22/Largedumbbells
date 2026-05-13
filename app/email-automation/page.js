@@ -2,22 +2,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-
-const TAG_COLORS = {
-  uncalled: '#555',
-  'called once': '#378ADD',
-  'called twice': '#F0A500',
-  'called three times': '#E74C3C',
-  'not interested': '#888',
-  'call back': '#9B59B6',
-  booked: '#2ECC71',
-}
-
-const STATUS_STYLES = {
-  draft:  { bg: '#33333322', color: '#888' },
-  active: { bg: '#2ECC7122', color: '#2ECC71' },
-  paused: { bg: '#F0A50022', color: '#F0A500' },
-}
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  TAG_COLORS,
+  Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
+  CornerBracket,
+} from '@/lib/brand'
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -28,6 +18,29 @@ function timeAgo(dateStr) {
   if (mins < 60) return `${mins}m ago`
   if (hrs < 24) return `${hrs}h ago`
   return `${days}d ago`
+}
+
+function StatCell({ value, label, color, last }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      gap: 4,
+      padding: '8px 20px',
+      borderRight: last ? 'none' : `1px solid ${BRAND.border}`,
+      minWidth: 90,
+    }}>
+      <span style={{
+        fontFamily: FONT_DISPLAY,
+        fontSize: 22, fontWeight: 400,
+        color, lineHeight: 1,
+        letterSpacing: '0.02em',
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</span>
+      <Eyebrow color={BRAND.textMuted} style={{ fontSize: 8, letterSpacing: '0.25em' }}>
+        {label}
+      </Eyebrow>
+    </div>
+  )
 }
 
 export default function EmailAutomation() {
@@ -90,210 +103,242 @@ export default function EmailAutomation() {
     setCampaigns(prev => prev.filter(c => c.id !== id))
   }
 
+  async function updateStatus(id, newStatus) {
+    await supabase.from('email_campaigns').update({ status: newStatus }).eq('id', id)
+    setCampaigns(prev => prev.map(x => x.id === id ? { ...x, status: newStatus } : x))
+  }
+
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0a', fontFamily: 'sans-serif' }}>
-      <div style={{
-        borderBottom: '1px solid #222', padding: '16px 32px', background: '#111',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
+    <PageBackground style={{ minHeight: '100vh' }}>
 
-        {/* Left: Back to Outreach */}
-        <Link href="/calls"
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Back to Outreach Pipeline</Link>
+      <PageHeader
+        pageLabel="Email Automation"
+        leftSlot={
+          <Link href="/calls" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← Outreach Pipeline</BrandButton>
+          </Link>
+        }
+        rightSlot={<div style={{ minWidth: 180 }} />}
+      />
 
-        {/* Center: Brand */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
-            LARGE DUMBBELLS
-          </h1>
-          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
-            EMAIL AUTOMATION
-          </p>
-        </div>
+      <div style={{ padding: '32px 24px', maxWidth: 1280, margin: '0 auto' }}>
 
-        {/* Right: spacer */}
-        <div style={{ width: 180 }} />
-      </div>
-
-      <div style={{ padding: '24px 32px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        {/* Title + Create */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-end', marginBottom: 28,
+          flexWrap: 'wrap', gap: 16,
+        }}>
           <div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: '#e0e0e0' }}>Campaigns</h2>
-            <p style={{ fontSize: 14, marginTop: 4, color: '#555' }}>
-              Trigger-based email and SMS sequences for your call list contacts.
+            <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
+              Lead Nurture
+            </Eyebrow>
+            <DisplayHeading size={38} style={{ marginBottom: 12 }}>
+              Campaigns
+            </DisplayHeading>
+            <GoldRule width={40} />
+            <p style={{
+              fontSize: 11, marginTop: 14, color: BRAND.textMuted,
+              fontFamily: FONT_BODY,
+              letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600,
+            }}>
+              Trigger-Based Email Sequences For Your Call List
             </p>
           </div>
+
           {!creating ? (
-            <button onClick={() => setCreating(true)}
-              style={{
-                background: '#B8935A', color: '#000', border: 'none',
-                cursor: 'pointer', fontSize: 14, padding: '8px 16px',
-                borderRadius: 8, fontWeight: 500,
-              }}>+ Create campaign</button>
+            <BrandButton variant="solid" size="md" onClick={() => setCreating(true)}>
+              + Create Campaign
+            </BrandButton>
           ) : (
             <div style={{ display: 'flex', gap: 8 }}>
               <input autoFocus value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') createCampaign() }}
-                placeholder="Campaign name…"
+                placeholder="CAMPAIGN NAME…"
                 style={{
-                  background: '#111', color: '#e0e0e0', border: '1px solid #333',
-                  padding: '8px 12px', borderRadius: 8, fontSize: 14,
-                  minWidth: 240, outline: 'none',
-                }} />
-              <button onClick={createCampaign}
-                style={{
-                  background: '#B8935A', color: '#000', border: 'none',
-                  cursor: 'pointer', fontSize: 14, padding: '8px 16px',
-                  borderRadius: 8, fontWeight: 500,
-                }}>Create</button>
-              <button onClick={() => { setCreating(false); setNewName('') }}
-                style={{
-                  background: '#1a1a1a', color: '#888', border: '1px solid #333',
-                  cursor: 'pointer', fontSize: 14, padding: '8px 12px', borderRadius: 8,
-                }}>Cancel</button>
+                  background: BRAND.bgCard,
+                  color: BRAND.textPrimary,
+                  border: `1px solid ${BRAND.border}`,
+                  padding: '10px 14px',
+                  fontSize: 11,
+                  letterSpacing: '0.15em',
+                  fontFamily: FONT_BODY,
+                  minWidth: 260,
+                  outline: 'none',
+                }}
+                onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+                onBlur={e => { e.target.style.borderColor = BRAND.border }} />
+              <BrandButton variant="solid" size="md" onClick={createCampaign}>Create</BrandButton>
+              <BrandButton variant="ghost" size="md" onClick={() => { setCreating(false); setNewName('') }}>
+                Cancel
+              </BrandButton>
             </div>
           )}
         </div>
 
         {loading ? (
-          <p style={{ fontSize: 14, color: '#555' }}>Loading campaigns…</p>
+          <Eyebrow color={BRAND.textDim}>Loading Campaigns…</Eyebrow>
         ) : campaigns.length === 0 ? (
           <div style={{
-            background: '#111', border: '1px solid #222',
-            borderRadius: 12, padding: 48, textAlign: 'center',
+            position: 'relative',
+            background: BRAND.bgCard,
+            border: `1px dashed ${BRAND.border}`,
+            padding: '60px 32px', textAlign: 'center',
           }}>
-            <p style={{ fontSize: 14, marginBottom: 8, color: '#888' }}>No campaigns yet</p>
-            <p style={{ fontSize: 12, color: '#555' }}>
+            <CornerBracket position="tl" />
+            <CornerBracket position="tr" />
+            <CornerBracket position="bl" />
+            <CornerBracket position="br" />
+            <Eyebrow color={BRAND.textMuted} style={{ fontSize: 11, letterSpacing: '0.3em', marginBottom: 12 }}>
+              No Campaigns Yet
+            </Eyebrow>
+            <p style={{
+              fontSize: 12, color: BRAND.textDim,
+              fontFamily: FONT_BODY, fontStyle: 'italic',
+              marginTop: 8,
+            }}>
               Create your first email automation to start nurturing leads.
             </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {campaigns.map(c => {
-              const s = STATUS_STYLES[c.status] || STATUS_STYLES.draft
               const cs = stats[c.id] || { enrolled: 0, booked: 0, completed: 0 }
+              const isActive = (c.status || 'draft') === 'active'
               return (
                 <div key={c.id}
                   style={{
-                    background: '#111', border: '1px solid #1a1a1a',
-                    borderRadius: 12, padding: 20,
-                  }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                        <Link href={`/email-automation/${c.id}`}
-                          style={{ fontSize: 16, fontWeight: 600, color: '#e0e0e0', textDecoration: 'none' }}>
-                          {c.name}
-                        </Link>
+                    position: 'relative',
+                    background: BRAND.bgCard,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '20px 24px',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = BRAND.borderGold }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BRAND.border }}>
 
-                        {/* Draft / Published toggle */}
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          background: '#0d0d0d', border: '1px solid #222',
-                          borderRadius: 999, padding: 2,
-                        }}>
-                          {[
-                            { key: 'draft',  label: 'Draft' },
-                            { key: 'active', label: 'Published' },
-                          ].map(opt => {
-                            const isActive = (c.status || 'draft') === opt.key
-                            return (
-                              <button key={opt.key}
-                                onClick={async () => {
-                                  await supabase.from('email_campaigns').update({ status: opt.key }).eq('id', c.id)
-                                  setCampaigns(prev => prev.map(x => x.id === c.id ? { ...x, status: opt.key } : x))
-                                }}
-                                style={{
-                                  background: isActive ? (opt.key === 'active' ? '#B8935A' : '#2a2a2a') : 'transparent',
-                                  color:      isActive ? (opt.key === 'active' ? '#000' : '#ccc') : '#666',
-                                  border:     'none',
-                                  padding:    '3px 10px',
-                                  borderRadius: 999,
-                                  fontSize:   10, fontWeight: 600,
-                                  cursor:     'pointer',
-                                  transition: 'all 0.15s',
-                                  letterSpacing: '0.03em',
-                                }}>
-                                {opt.label}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#555' }}>
-                        {c.trigger_tag ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            Triggers when tagged
-                            <span style={{
-                              color: TAG_COLORS[c.trigger_tag],
-                              background: `${TAG_COLORS[c.trigger_tag]}22`,
-                              padding: '2px 8px', borderRadius: 10, fontWeight: 500,
-                            }}>{c.trigger_tag}</span>
-                          </span>
-                        ) : (
-                          <span style={{ color: '#666' }}>No trigger set</span>
-                        )}
-                        <span>·</span>
-                        <span>Created {timeAgo(c.created_at)}</span>
-                      </div>
-                    </div>
+                  <CornerBracket position="tl" size={14} />
+                  <CornerBracket position="tr" size={14} />
+                  <CornerBracket position="bl" size={14} />
+                  <CornerBracket position="br" size={14} />
 
-                    {/* Enrollment stats button */}
-                    <Link href={`/email-automation/${c.id}/enrolled`}
+                  {/* Top row: name + status + meta */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <Link href={`/email-automation/${c.id}`}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: '#1a1a1a', color: '#378ADD',
-                        border: '1px solid #378ADD44', padding: '8px 14px',
-                        borderRadius: 8, fontSize: 12, textDecoration: 'none',
-                        marginRight: 16,
-                      }}>
-                      <span style={{ fontSize: 14 }}>📊</span>
-                      <span>Enrollment stats</span>
+                        fontFamily: FONT_DISPLAY,
+                        fontSize: 22, fontWeight: 400,
+                        color: BRAND.textPrimary,
+                        textDecoration: 'none',
+                        letterSpacing: '0.02em',
+                        textTransform: 'uppercase',
+                        transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold }}
+                      onMouseLeave={e => { e.currentTarget.style.color = BRAND.textPrimary }}>
+                      {c.name}
                     </Link>
 
-                    {/* Stats */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginRight: 16 }}>
-                      <div style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        padding: '4px 16px', borderRight: '1px solid #222',
-                      }}>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#B8935A' }}>{cs.enrolled}</span>
-                        <span style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enrolled</span>
-                      </div>
-                      <div style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        padding: '4px 16px', borderRight: '1px solid #222',
-                      }}>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#2ECC71' }}>{cs.booked}</span>
-                        <span style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Booked</span>
-                      </div>
-                      <div style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        padding: '4px 16px',
-                      }}>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#888' }}>{cs.completed}</span>
-                        <span style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Completed</span>
-                      </div>
+                    {/* Status pill toggle */}
+                    <div style={{
+                      display: 'flex', gap: 0,
+                      border: `1px solid ${BRAND.border}`,
+                    }}>
+                      {[
+                        { key: 'draft',  label: 'Draft' },
+                        { key: 'active', label: 'Published' },
+                      ].map((opt, i) => {
+                        const active = (c.status || 'draft') === opt.key
+                        const color = opt.key === 'active' ? BRAND.gold : BRAND.textSecondary
+                        return (
+                          <button key={opt.key}
+                            onClick={() => updateStatus(c.id, opt.key)}
+                            style={{
+                              background: active
+                                ? (opt.key === 'active' ? BRAND.gold : BRAND.bgRaised)
+                                : 'transparent',
+                              color: active
+                                ? (opt.key === 'active' ? '#000' : color)
+                                : BRAND.textDim,
+                              border: 'none',
+                              borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                              padding: '4px 12px',
+                              fontSize: 9, fontWeight: 700,
+                              letterSpacing: '0.2em', textTransform: 'uppercase',
+                              fontFamily: FONT_BODY,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                            }}>
+                            {opt.label}
+                          </button>
+                        )
+                      })}
                     </div>
 
+                    {/* Trigger + Created meta */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      fontSize: 10, color: BRAND.textMuted,
+                      fontFamily: FONT_BODY,
+                      letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
+                      marginLeft: 'auto',
+                    }}>
+                      {c.trigger_tag ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>Triggers On</span>
+                          <span style={{
+                            color: TAG_COLORS[c.trigger_tag],
+                            background: `${TAG_COLORS[c.trigger_tag]}1f`,
+                            border: `1px solid ${TAG_COLORS[c.trigger_tag]}55`,
+                            padding: '3px 10px',
+                            fontWeight: 700,
+                            letterSpacing: '0.2em',
+                          }}>{c.trigger_tag}</span>
+                        </span>
+                      ) : (
+                        <span style={{ color: BRAND.textDim }}>No Trigger Set</span>
+                      )}
+                      <span style={{ color: BRAND.textDim }}>·</span>
+                      <span>Created {timeAgo(c.created_at)}</span>
+                    </div>
+                  </div>
+
+                  {/* Bottom row: stats + actions */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 18,
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                  }}>
+                    {/* Stat ribbon */}
+                    <div style={{
+                      display: 'flex',
+                      background: BRAND.bgRaised,
+                      border: `1px solid ${BRAND.border}`,
+                    }}>
+                      <StatCell value={cs.enrolled}  label="Enrolled"  color={BRAND.gold} />
+                      <StatCell value={cs.booked}    label="Booked"    color={BRAND.statusBooked} />
+                      <StatCell value={cs.completed} label="Completed" color={BRAND.textSecondary} last />
+                    </div>
+
+                    {/* Actions */}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <Link href={`/email-automation/${c.id}`}
-                        style={{
-                          background: '#1a1a1a', color: '#B8935A',
-                          border: '1px solid #B8935A44', padding: '6px 12px',
-                          borderRadius: 6, fontSize: 12, textDecoration: 'none',
-                        }}>Edit →</Link>
-                      <button onClick={() => deleteCampaign(c.id)}
-                        style={{
-                          background: '#1a1a1a', color: '#E74C3C',
-                          border: '1px solid #333', padding: '6px 12px',
-                          borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                        }}>Delete</button>
+                      <Link href={`/email-automation/${c.id}/enrolled`} style={{ textDecoration: 'none' }}>
+                        <BrandButton
+                          variant="ghost"
+                          size="sm"
+                          style={{ color: BRAND.statusNew, borderColor: 'rgba(74,144,217,0.33)' }}>
+                          Enrollment Stats
+                        </BrandButton>
+                      </Link>
+                      <Link href={`/email-automation/${c.id}`} style={{ textDecoration: 'none' }}>
+                        <BrandButton variant="primary" size="sm">
+                          Edit →
+                        </BrandButton>
+                      </Link>
+                      <BrandButton variant="danger" size="sm" onClick={() => deleteCampaign(c.id)}>
+                        Delete
+                      </BrandButton>
                     </div>
                   </div>
                 </div>
@@ -302,6 +347,6 @@ export default function EmailAutomation() {
           </div>
         )}
       </div>
-    </div>
+    </PageBackground>
   )
 }

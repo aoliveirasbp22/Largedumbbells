@@ -2,34 +2,26 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  STATUS_STYLES,
+  Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton, StatusPill,
+  CornerBracket,
+} from '@/lib/brand'
 
-// ─── Status config ────────────────────────────────────────────────────────────
-
+// ─── Status config ────────────────────────────────────────────────────
 const MANUAL_STATUSES = ['link sent', 'booked', 'disqualified']
 const AUTO_STATUSES   = ['new', 'qualifying', 'ghosted']
 const ALL_STATUSES    = [...AUTO_STATUSES, ...MANUAL_STATUSES]
+const UNPIN_STATUSES  = ['booked', 'disqualified']
 
-const STATUS_STYLES = {
-  new:          { bg: '#378ADD22', color: '#378ADD', border: '#378ADD44' },
-  qualifying:   { bg: '#F0A50022', color: '#F0A500', border: '#F0A50044' },
-  ghosted:      { bg: '#66666622', color: '#888',    border: '#66666644' },
-  'link sent':  { bg: '#9B59B622', color: '#9B59B6', border: '#9B59B644' },
-  booked:       { bg: '#2ECC7122', color: '#2ECC71', border: '#2ECC7144' },
-  disqualified: { bg: '#E74C3C22', color: '#E74C3C', border: '#E74C3C44' },
-}
-
-const UNPIN_STATUSES = ['booked', 'disqualified']
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
+// ─── Helpers ──────────────────────────────────────────────────────────
 function deriveStatus(lead, messages) {
   if (MANUAL_STATUSES.includes(lead.status)) return lead.status
   if (!messages || messages.length === 0) return lead.status
-
-  const last        = messages[messages.length - 1]
-  const isInbound   = last.direction === 'inbound'
-  const hoursSince  = (Date.now() - new Date(last.created_at).getTime()) / 36e5
-
+  const last = messages[messages.length - 1]
+  const isInbound = last.direction === 'inbound'
+  const hoursSince = (Date.now() - new Date(last.created_at).getTime()) / 36e5
   if (isInbound && hoursSince >= 24) return 'ghosted'
   if (messages.some(m => m.direction === 'outbound')) return 'qualifying'
   return 'new'
@@ -54,19 +46,10 @@ function timeAgo(dateStr) {
   const mins = Math.floor(diff / 60000)
   const hrs  = Math.floor(mins / 60)
   const days = Math.floor(hrs / 24)
-  if (mins < 1)  return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (hrs  < 24) return `${hrs}h ago`
-  return `${days}d ago`
-}
-
-function currentRangeStart(timeframe) {
-  const now = new Date()
-  const start = new Date(now)
-  if (timeframe === 'daily')   start.setHours(0,0,0,0)
-  if (timeframe === 'weekly')  start.setDate(now.getDate() - 7)
-  if (timeframe === 'monthly') start.setDate(now.getDate() - 30)
-  return start
+  if (mins < 1)  return 'now'
+  if (mins < 60) return `${mins}m`
+  if (hrs  < 24) return `${hrs}h`
+  return `${days}d`
 }
 
 function displayName(lead) {
@@ -75,30 +58,29 @@ function displayName(lead) {
   return 'Anonymous'
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function PlatformIcon({ platform, size = 12 }) {
+// ─── Sub-components ───────────────────────────────────────────────────
+function PlatformIcon({ platform, size = 11 }) {
   if (platform === 'instagram') {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-        <rect x="2" y="2" width="20" height="20" rx="5" stroke="#888" strokeWidth="2"/>
-        <circle cx="12" cy="12" r="4" stroke="#888" strokeWidth="2"/>
-        <circle cx="17.5" cy="6.5" r="1" fill="#888"/>
+        <rect x="2" y="2" width="20" height="20" rx="5" stroke={BRAND.textMuted} strokeWidth="2"/>
+        <circle cx="12" cy="12" r="4" stroke={BRAND.textMuted} strokeWidth="2"/>
+        <circle cx="17.5" cy="6.5" r="1" fill={BRAND.textMuted}/>
       </svg>
     )
   }
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="#888" style={{ flexShrink: 0 }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={BRAND.textMuted} style={{ flexShrink: 0 }}>
       <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"/>
     </svg>
   )
 }
 
-function StarIcon({ filled, size = 14 }) {
+function StarIcon({ filled, size = 13 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24"
-      fill={filled ? '#B8935A' : 'none'}
-      stroke={filled ? '#B8935A' : '#666'}
+      fill={filled ? BRAND.gold : 'none'}
+      stroke={filled ? BRAND.gold : BRAND.textMuted}
       strokeWidth="2" strokeLinejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
     </svg>
@@ -108,9 +90,9 @@ function StarIcon({ filled, size = 14 }) {
 function DefaultAvatarIcon({ size = 28 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <circle cx="12" cy="12" r="11" fill="#1a1a1a" stroke="#333" strokeWidth="1"/>
-      <circle cx="12" cy="9" r="3.5" fill="#444"/>
-      <path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5" stroke="#444" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+      <circle cx="12" cy="12" r="11" fill={BRAND.bgRaised} stroke={BRAND.borderStrong} strokeWidth="1"/>
+      <circle cx="12" cy="9" r="3.5" fill={BRAND.textDim}/>
+      <path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5" stroke={BRAND.textDim} strokeWidth="2.5" strokeLinecap="round" fill="none"/>
     </svg>
   )
 }
@@ -126,7 +108,7 @@ function Avatar({ lead, size = 28 }) {
         style={{
           width: size, height: size, borderRadius: '50%',
           objectFit: 'cover', flexShrink: 0,
-          border: '1px solid #333',
+          border: `1px solid ${BRAND.border}`,
         }}
         onError={e => { e.currentTarget.style.display = 'none' }}
       />
@@ -155,7 +137,7 @@ function StageDropdown({ activeStatus, onChange }) {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  const s = STATUS_STYLES[activeStatus] || { bg: '#33333322', color: '#888', border: '#666' }
+  const s = STATUS_STYLES[activeStatus] || { bg: 'rgba(102,102,102,0.13)', color: BRAND.textMuted, border: 'rgba(102,102,102,0.33)' }
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -163,10 +145,12 @@ function StageDropdown({ activeStatus, onChange }) {
         onClick={() => setOpen(o => !o)}
         style={{
           background: s.bg, color: s.color, border: `1px solid ${s.border}`,
-          padding: '4px 10px', borderRadius: 999,
-          fontSize: 12, fontWeight: 600,
-          display: 'flex', alignItems: 'center', gap: 6,
-          cursor: 'pointer', minWidth: 110, justifyContent: 'space-between',
+          padding: '5px 12px',
+          fontSize: 10, fontWeight: 700,
+          letterSpacing: '0.15em', textTransform: 'uppercase',
+          fontFamily: FONT_BODY,
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: 'pointer', minWidth: 130, justifyContent: 'space-between',
         }}>
         <span>{activeStatus}</span>
         <ChevronDown size={10} color={s.color} />
@@ -174,10 +158,10 @@ function StageDropdown({ activeStatus, onChange }) {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-          background: '#111', border: '1px solid #333', borderRadius: 8,
-          padding: 4, minWidth: 150, zIndex: 50,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-          display: 'flex', flexDirection: 'column', gap: 2,
+          background: BRAND.bgRaised, border: `1px solid ${BRAND.borderStrong}`,
+          padding: 4, minWidth: 170, zIndex: 50,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          display: 'flex', flexDirection: 'column', gap: 1,
         }}>
           {ALL_STATUSES.map(st => {
             const ss = STATUS_STYLES[st]
@@ -188,15 +172,18 @@ function StageDropdown({ activeStatus, onChange }) {
                 style={{
                   background: isActive ? ss.bg : 'transparent',
                   color: ss.color, border: 'none',
-                  padding: '6px 10px', borderRadius: 5,
-                  fontSize: 12, fontWeight: 600, textAlign: 'left',
+                  padding: '8px 10px',
+                  fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.12em', textTransform: 'uppercase',
+                  fontFamily: FONT_BODY,
+                  textAlign: 'left',
                   cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 8,
+                  display: 'flex', alignItems: 'center', gap: 10,
                 }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#1a1a1a' }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = BRAND.bgCardHover }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
                 <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
+                  width: 6, height: 6, borderRadius: '50%',
                   background: ss.color, flexShrink: 0,
                 }} />
                 {st}
@@ -209,18 +196,7 @@ function StageDropdown({ activeStatus, onChange }) {
   )
 }
 
-const DumbbellIcon = ({ size = 28, opacity = 1 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ opacity }}>
-    <rect x="2"  y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="19" y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="5"  y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="17" y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="7"  y="11" width="10" height="2" rx="1" fill="#B8935A"/>
-  </svg>
-)
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
+// ─── Main Component ───────────────────────────────────────────────────
 export default function DMInbox() {
   const [leads,        setLeads]        = useState([])
   const [leadMessages, setLeadMessages] = useState({})
@@ -229,7 +205,6 @@ export default function DMInbox() {
   const [filter,       setFilter]       = useState('all')
   const [search,       setSearch]       = useState('')
   const [sending,      setSending]      = useState(false)
-  const [timeframe,    setTimeframe]    = useState('daily')
   const messagesEndRef = useRef(null)
 
   useEffect(() => { fetchLeads() }, [])
@@ -241,7 +216,6 @@ export default function DMInbox() {
       const state = JSON.parse(saved)
       if (state.search !== undefined) setSearch(state.search)
       if (state.filter)               setFilter(state.filter)
-      if (state.timeframe)            setTimeframe(state.timeframe)
       if (state.selectedLeadId)       {
         window.__pendingSelectedLeadId = state.selectedLeadId
       }
@@ -261,13 +235,13 @@ export default function DMInbox() {
   useEffect(() => {
     try {
       localStorage.setItem('inboxState', JSON.stringify({
-        search, filter, timeframe,
+        search, filter,
         selectedLeadId: selectedLead?.id || null,
       }))
     } catch (err) {
       console.error('Inbox state save error:', err)
     }
-  }, [search, filter, timeframe, selectedLead])
+  }, [search, filter, selectedLead])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -412,203 +386,296 @@ export default function DMInbox() {
   const needsReplyCount  = leadsWithStatus.filter(l => needsReply(leadMessages[l.id])).length
   const pinnedCount      = leadsWithStatus.filter(l => l.pinned).length
 
-  const rangeStart = currentRangeStart(timeframe)
-  const inRange = leadsWithStatus.filter(l => new Date(l.created_at) >= rangeStart)
-  const statMessages   = inRange.length
-  const statQualifying = inRange.filter(l => l.status === 'qualifying' || l.status === 'new').length
-  const statLinkSent   = inRange.filter(l => l.status === 'link sent').length
-  const statBooked     = inRange.filter(l => l.status === 'booked').length
+  // Active window: 30 days from last activity
+  const ACTIVE_WINDOW_DAYS = 30
+  const activeCutoff = new Date()
+  activeCutoff.setDate(activeCutoff.getDate() - ACTIVE_WINDOW_DAYS)
+
+  const activeLeads = leadsWithStatus.filter(l => {
+    const msgs = leadMessages[l.id] || []
+    const lastActivity = msgs.length > 0
+      ? new Date(msgs[msgs.length - 1].created_at)
+      : new Date(l.created_at)
+    return lastActivity >= activeCutoff
+  })
+
+  const statMessagesSent = activeLeads.length
+  const statQualifying   = activeLeads.filter(l => l.status === 'qualifying' || l.status === 'new').length
+
+  const stats = [
+    { label: 'Messages Sent', value: statMessagesSent, color: BRAND.gold },
+    { label: 'Qualifying',    value: statQualifying,   color: BRAND.statusNew },
+  ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'sans-serif' }}>
+    <PageBackground style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
 
-      {/* Top header bar */}
-      <div style={{
-        padding: '14px 24px',
-        borderBottom: '1px solid #1a1a1a',
-        background: '#111',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexShrink: 0,
-      }}>
-        <Link href="/"
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Home</Link>
+      <PageHeader
+        pageLabel="DM Pipeline"
+        leftSlot={
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← Home</BrandButton>
+          </Link>
+        }
+        rightSlot={
+          <Link href="/analytics" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm" style={{ color: BRAND.statusNew, borderColor: 'rgba(74,144,217,0.33)' }}>
+              Analytics →
+            </BrandButton>
+          </Link>
+        }
+      />
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <DumbbellIcon size={24} />
-            <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 16, color: '#B8935A' }}>
-              LARGE DUMBBELLS
-            </h1>
-          </div>
-          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
-            DM PIPELINE
-          </p>
-        </div>
+      {/* Mini stat ribbon */}
+      <div style={{ padding: '14px 24px', background: BRAND.bg, flexShrink: 0 }}>
+        <div style={{
+          position: 'relative',
+          background: BRAND.bgCard,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 4,
+          display: 'flex',
+          alignItems: 'stretch',
+          overflow: 'hidden',
+        }}>
+          <CornerBracket position="tl" size={14} />
+          <CornerBracket position="tr" size={14} />
+          <CornerBracket position="bl" size={14} />
+          <CornerBracket position="br" size={14} />
 
-        <Link href="/analytics"
-          style={{
-            background: '#1a1a1a', color: '#378ADD',
-            border: '1px solid #378ADD44', padding: '6px 14px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-          📊 Analytics →
-        </Link>
-      </div>
-
-      {/* Stat snapshot row */}
-      <div style={{
-        padding: '20px 24px',
-        borderBottom: '1px solid #1a1a1a',
-        background: '#0d0d0d',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        position: 'relative',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 48 }}>
-          {[
-            { label: 'Messages',   value: statMessages,   color: '#B8935A' },
-            { label: 'Qualifying', value: statQualifying, color: '#378ADD' },
-            { label: 'Link Sent',  value: statLinkSent,   color: '#9B59B6' },
-            { label: 'Booked',     value: statBooked,     color: '#2ECC71' },
-          ].map(s => (
-            <div key={s.label}>
-              <p style={{ fontSize: 20, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</p>
+          {stats.map((s, idx) => (
+            <div key={s.label} style={{
+              flex: 1,
+              padding: '18px 24px',
+              borderRight: idx < stats.length - 1 ? `1px solid ${BRAND.border}` : 'none',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'background 0.2s',
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0,
+                height: 1,
+                background: `linear-gradient(90deg, transparent, ${s.color}aa, transparent)`,
+                opacity: 0.5,
+              }} />
               <p style={{
-                fontSize: 9, color: '#666', marginTop: 4,
-                textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600,
-              }}>{s.label}</p>
+                fontFamily: FONT_DISPLAY,
+                fontSize: 30, fontWeight: 400, color: s.color,
+                lineHeight: 1, letterSpacing: '0.02em',
+                fontVariantNumeric: 'tabular-nums',
+                margin: 0,
+              }}>
+                {s.value}
+              </p>
+              <Eyebrow color={BRAND.textMuted} style={{ letterSpacing: '0.2em', fontSize: 9 }}>
+                {s.label}
+              </Eyebrow>
             </div>
           ))}
-        </div>
-        <div style={{
-          display: 'flex', gap: 4,
-          position: 'absolute', right: 24, top: '50%',
-          transform: 'translateY(-50%)',
-        }}>
-          {[
-            { key: 'daily',   label: 'Daily' },
-            { key: 'weekly',  label: 'Weekly' },
-            { key: 'monthly', label: 'Monthly' },
-          ].map(t => (
-            <button key={t.key} onClick={() => setTimeframe(t.key)}
-              style={{
-                background: timeframe === t.key ? '#B8935A' : 'transparent',
-                color: timeframe === t.key ? '#000' : '#666',
-                border: `1px solid ${timeframe === t.key ? '#B8935A' : '#333'}`,
-                padding: '4px 12px', borderRadius: 6,
-                fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              }}>{t.label}</button>
-          ))}
+
+          {/* Window label cell */}
+          <div style={{
+            padding: '18px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            gap: 6,
+            background: BRAND.bgRaised,
+            borderLeft: `1px solid ${BRAND.border}`,
+            minWidth: 180,
+          }}>
+            <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em' }}>
+              Active Window
+            </Eyebrow>
+            <span style={{
+              fontSize: 12, color: BRAND.textPrimary, fontWeight: 500,
+              fontFamily: FONT_BODY,
+            }}>
+              Last {ACTIVE_WINDOW_DAYS} days
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Inbox content */}
-      <div className="flex font-sans" style={{ background: '#0a0a0a', height: 'calc(100vh - 200px)', minHeight: 500 }}>
+      <div style={{
+        display: 'flex',
+        background: BRAND.bg,
+        height: 'calc(100vh - 240px)',
+        minHeight: 500,
+      }}>
 
         {/* ── Sidebar ── */}
-        <div className="w-72 flex flex-col border-r flex-shrink-0" style={{ background: '#111', borderColor: '#222' }}>
+        <div style={{
+          width: 300,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRight: `1px solid ${BRAND.border}`,
+          flexShrink: 0,
+          background: BRAND.bgCard,
+        }}>
 
-          <div className="p-3 border-b" style={{ borderColor: '#222' }}>
+          <div style={{ padding: 12, borderBottom: `1px solid ${BRAND.border}` }}>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search name or handle…"
-              className="w-full text-xs px-3 py-2 rounded-lg focus:outline-none"
-              style={{ background: '#1a1a1a', color: '#e0e0e0', border: '1px solid #333' }}
+              placeholder="SEARCH NAME OR HANDLE…"
+              style={{
+                width: '100%',
+                background: BRAND.bgInput,
+                color: BRAND.textPrimary,
+                border: `1px solid ${BRAND.border}`,
+                padding: '8px 12px',
+                fontSize: 10,
+                letterSpacing: '0.15em',
+                fontFamily: FONT_BODY,
+                outline: 'none',
+              }}
+              onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+              onBlur={e => { e.target.style.borderColor = BRAND.border }}
             />
           </div>
 
-          <div className="p-3 border-b" style={{ borderColor: '#222' }}>
-            <div className="flex flex-wrap gap-1">
-              {['all', 'pinned', ...ALL_STATUSES].map(f => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1"
-                  style={{
-                    background:  filter === f ? '#B8935A' : '#1a1a1a',
-                    color:       filter === f ? '#000' : '#888',
-                    border:      '1px solid',
-                    borderColor: filter === f ? '#B8935A' : '#333',
-                  }}>
-                  {f === 'pinned' && <StarIcon filled={filter === f} size={10} />}
-                  {f}
-                  {f === 'pinned' && pinnedCount > 0 && (
-                    <span style={{ fontSize: '10px', opacity: filter === f ? 0.7 : 1 }}>
-                      ({pinnedCount})
-                    </span>
-                  )}
-                </button>
-              ))}
+          <div style={{ padding: 12, borderBottom: `1px solid ${BRAND.border}` }}>
+            <Eyebrow color={BRAND.textDim} style={{ marginBottom: 8, fontSize: 9, letterSpacing: '0.3em' }}>Filter</Eyebrow>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {['all', 'pinned', ...ALL_STATUSES].map(f => {
+                const active = filter === f
+                return (
+                  <button key={f} onClick={() => setFilter(f)}
+                    style={{
+                      background:  active ? BRAND.gold : 'transparent',
+                      color:       active ? '#000' : BRAND.textMuted,
+                      border:      `1px solid ${active ? BRAND.gold : BRAND.border}`,
+                      padding:     '4px 8px',
+                      fontSize:    9,
+                      fontWeight:  700,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      fontFamily:  FONT_BODY,
+                      cursor:      'pointer',
+                      display:     'flex', alignItems: 'center', gap: 4,
+                      transition:  'all 0.15s',
+                    }}>
+                    {f === 'pinned' && <StarIcon filled={active} size={9} />}
+                    {f}
+                    {f === 'pinned' && pinnedCount > 0 && (
+                      <span style={{ fontSize: 8, opacity: active ? 0.7 : 1 }}>
+                        ({pinnedCount})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           {needsReplyCount > 0 && (
-            <div className="px-3 py-2 border-b flex items-center gap-2"
-              style={{ borderColor: '#222', background: '#B8935A11' }}>
-              <div className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ background: '#B8935A', boxShadow: '0 0 6px #B8935A' }} />
-              <span className="text-xs" style={{ color: '#B8935A' }}>
-                {needsReplyCount} waiting on your reply
+            <div style={{
+              padding: '10px 14px',
+              borderBottom: `1px solid ${BRAND.border}`,
+              background: BRAND.goldFaint,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: 999,
+                background: BRAND.gold, flexShrink: 0,
+                boxShadow: `0 0 8px ${BRAND.gold}`,
+              }} />
+              <span style={{
+                fontSize: 10, color: BRAND.gold,
+                fontWeight: 700, letterSpacing: '0.15em',
+                textTransform: 'uppercase', fontFamily: FONT_BODY,
+              }}>
+                {needsReplyCount} Waiting On Your Reply
               </span>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto">
+          <div style={{ flex: 1, overflowY: 'auto' }}>
             {sorted.length === 0 && (
-              <p className="text-xs p-4" style={{ color: '#555' }}>No leads found</p>
+              <p style={{
+                fontSize: 11, color: BRAND.textDim, padding: 16,
+                fontFamily: FONT_BODY,
+              }}>No leads found</p>
             )}
             {sorted.map(lead => {
               const msgs       = leadMessages[lead.id] || []
               const lastMsg    = msgs.at(-1)
               const unread     = isUnread(lead, msgs)
               const isSelected = selectedLead?.id === lead.id
-              const sStyle     = STATUS_STYLES[lead.status] || { bg: '#33333322', color: '#888', border: '#666' }
               return (
                 <div key={lead.id} onClick={() => selectLead(lead)}
-                  className="p-3 cursor-pointer border-b transition-all"
                   style={{
-                    borderColor: '#1a1a1a',
-                    background:  isSelected ? '#1a1a1a' : 'transparent',
-                    borderLeft:  isSelected ? '2px solid #B8935A' : '2px solid transparent',
-                  }}>
-                  <div className="flex items-center gap-2 mb-1">
+                    padding: '12px 14px',
+                    cursor: 'pointer',
+                    borderBottom: `1px solid ${BRAND.border}`,
+                    background: isSelected ? BRAND.bgRaised : 'transparent',
+                    borderLeft: isSelected ? `2px solid ${BRAND.gold}` : '2px solid transparent',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = BRAND.bgCardHover }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <button
                       onClick={e => togglePin(lead.id, lead.pinned, e)}
-                      className="flex-shrink-0 flex items-center justify-center"
-                      style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                      style={{
+                        background: 'transparent', border: 'none', padding: 0,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        flexShrink: 0,
+                      }}
                       title={lead.pinned ? 'Unpin' : 'Pin'}>
-                      <StarIcon filled={!!lead.pinned} size={13} />
+                      <StarIcon filled={!!lead.pinned} size={12} />
                     </button>
                     <PlatformIcon platform={lead.platform} />
-                    <Avatar lead={lead} size={26} />
-                    <span className="font-medium text-sm truncate flex-1"
-                      style={{ color: unread ? '#e0e0e0' : '#bbb' }}>
+                    <Avatar lead={lead} size={24} />
+                    <span style={{
+                      flex: 1,
+                      fontSize: 12, fontWeight: 500,
+                      color: unread ? BRAND.textPrimary : BRAND.textSecondary,
+                      fontFamily: FONT_BODY,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      letterSpacing: '0.01em',
+                    }}>
                       {displayName(lead)}
                     </span>
-                    <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
+                    <span style={{
+                      fontSize: 9, color: BRAND.textDim, flexShrink: 0,
+                      fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      fontFamily: FONT_BODY,
+                    }}>
                       {timeAgo(lastMsg?.created_at || lead.created_at)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-2 pl-1">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingLeft: 4 }}>
                     {lastMsg ? (
-                      <p className="text-xs truncate flex-1" style={{ color: '#fff' }}>
+                      <p style={{
+                        flex: 1,
+                        fontSize: 11,
+                        color: unread ? BRAND.textPrimary : BRAND.textMuted,
+                        fontFamily: FONT_BODY,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
                         {lastMsg.direction === 'outbound' ? 'You: ' : ''}{lastMsg.content}
                       </p>
                     ) : (
-                      <p className="text-xs flex-1" style={{ color: '#666' }}>No messages yet</p>
+                      <p style={{
+                        flex: 1, fontSize: 11, color: BRAND.textDim,
+                        fontFamily: FONT_BODY, fontStyle: 'italic',
+                      }}>No messages yet</p>
                     )}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ background: sStyle.bg, color: sStyle.color, border: `1px solid ${sStyle.border}` }}>
-                        {lead.status}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <StatusPill status={lead.status} size="xs" />
                       {unread && (
-                        <div className="w-2 h-2 rounded-full"
-                          style={{ background: '#B8935A', boxShadow: '0 0 6px #B8935A' }} />
+                        <div style={{
+                          width: 6, height: 6, borderRadius: 999,
+                          background: BRAND.gold,
+                          boxShadow: `0 0 6px ${BRAND.gold}`,
+                        }} />
                       )}
                     </div>
                   </div>
@@ -619,34 +686,54 @@ export default function DMInbox() {
         </div>
 
         {/* ── Main message panel ── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {!selectedLead ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3">
-              <DumbbellIcon size={48} opacity={0.1} />
-              <p className="text-sm" style={{ color: '#444' }}>Select a lead to view the conversation</p>
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 16,
+            }}>
+              <img
+                src="/logo-large-dumbbells.png"
+                alt=""
+                style={{ width: 64, height: 64, opacity: 0.15 }}
+              />
+              <Eyebrow color={BRAND.textDim} style={{ fontSize: 10, letterSpacing: '0.35em' }}>
+                Select a lead to view the conversation
+              </Eyebrow>
             </div>
           ) : (
             <>
               {/* Contact bar */}
-              <div className="px-6 py-3 border-b flex items-center justify-between flex-shrink-0"
-                style={{ background: '#0f0f0f', borderColor: '#1a1a1a' }}>
-                <div className="flex items-center gap-3">
+              <div style={{
+                padding: '14px 24px',
+                borderBottom: `1px solid ${BRAND.border}`,
+                background: BRAND.bgCard,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexShrink: 0,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <Avatar lead={selectedLead} size={36} />
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm" style={{ color: '#e0e0e0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <p style={{
+                        fontSize: 14, fontWeight: 600,
+                        color: BRAND.textPrimary, fontFamily: FONT_BODY,
+                        letterSpacing: '0.01em',
+                      }}>
                         {displayName(selectedLead)}
                       </p>
                       <button onClick={e => togglePin(selectedLead.id, selectedLead.pinned, e)}
-                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
                         title={selectedLead.pinned ? 'Unpin' : 'Pin'}>
                         <StarIcon filled={!!selectedLead.pinned} size={14} />
                       </button>
                       <PlatformIcon platform={selectedLead.platform} />
                     </div>
-                    <p className="text-xs" style={{ color: '#555' }}>
-                      {selectedLead.platform && `· ${selectedLead.platform}`}
-                    </p>
+                    {selectedLead.platform && (
+                      <Eyebrow color={BRAND.textDim} style={{ fontSize: 8, letterSpacing: '0.25em', marginTop: 3 }}>
+                        {selectedLead.platform}
+                      </Eyebrow>
+                    )}
                   </div>
                 </div>
 
@@ -657,9 +744,16 @@ export default function DMInbox() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+              <div style={{
+                flex: 1, overflowY: 'auto', padding: 20,
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}>
                 {selectedMessages.length === 0 && (
-                  <p className="text-xs text-center mt-8" style={{ color: '#444' }}>No messages yet</p>
+                  <p style={{
+                    fontSize: 11, textAlign: 'center', marginTop: 32,
+                    color: BRAND.textDim, fontFamily: FONT_BODY,
+                    letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600,
+                  }}>No messages yet</p>
                 )}
                 {selectedMessages.map((msg, i) => {
                   const isOut    = msg.direction === 'outbound'
@@ -669,21 +763,30 @@ export default function DMInbox() {
                   return (
                     <div key={msg.id}>
                       {showTime && (
-                        <p className="text-xs text-center my-2" style={{ color: '#333' }}>
+                        <p style={{
+                          fontSize: 9, textAlign: 'center', margin: '12px 0',
+                          color: BRAND.textDim,
+                          letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600,
+                          fontFamily: FONT_BODY,
+                        }}>
                           {new Date(msg.created_at).toLocaleString('en-US', {
                             month: 'short', day: 'numeric',
                             hour: 'numeric', minute: '2-digit', hour12: true,
                           })}
                         </p>
                       )}
-                      <div className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                        <div className="max-w-sm px-4 py-2.5 text-sm"
-                          style={{
-                            background:   isOut ? '#B8935A' : '#1a1a1a',
-                            color:        isOut ? '#000' : '#ccc',
-                            borderRadius: isOut ? '14px 4px 14px 14px' : '4px 14px 14px 14px',
-                            lineHeight:   1.5,
-                          }}>
+                      <div style={{ display: 'flex', justifyContent: isOut ? 'flex-end' : 'flex-start' }}>
+                        <div style={{
+                          maxWidth: '70%',
+                          padding: '10px 14px',
+                          fontSize: 13,
+                          background:   isOut ? BRAND.gold : BRAND.bgRaised,
+                          color:        isOut ? '#000' : BRAND.textPrimary,
+                          borderRadius: isOut ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
+                          lineHeight:   1.5,
+                          fontFamily:   FONT_BODY,
+                          border: isOut ? 'none' : `1px solid ${BRAND.border}`,
+                        }}>
                           {msg.content}
                         </div>
                       </div>
@@ -694,23 +797,54 @@ export default function DMInbox() {
               </div>
 
               {/* Reply box */}
-              <div className="p-4 border-t flex gap-3 flex-shrink-0"
-                style={{ background: '#111', borderColor: '#222' }}>
+              <div style={{
+                padding: 16,
+                borderTop: `1px solid ${BRAND.border}`,
+                background: BRAND.bgCard,
+                display: 'flex', gap: 12,
+                flexShrink: 0,
+              }}>
                 <textarea
                   value={reply}
                   onChange={e => setReply(e.target.value)}
                   placeholder="Type your reply… (⌘↵ to send)"
-                  className="flex-1 text-sm resize-none rounded-lg px-3 py-2 focus:outline-none"
-                  style={{ background: '#1a1a1a', color: '#e0e0e0', border: '1px solid #333' }}
+                  style={{
+                    flex: 1,
+                    background: BRAND.bgInput,
+                    color: BRAND.textPrimary,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '10px 14px',
+                    fontSize: 13,
+                    resize: 'none',
+                    outline: 'none',
+                    fontFamily: FONT_BODY,
+                    lineHeight: 1.5,
+                  }}
                   rows={2}
+                  onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+                  onBlur={e => { e.target.style.borderColor = BRAND.border }}
                   onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendReply() }}
                 />
                 <button onClick={sendReply} disabled={sending || !reply.trim()}
-                  className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
                   style={{
-                    background: sending || !reply.trim() ? '#2a2a2a' : '#B8935A',
-                    color:      sending || !reply.trim() ? '#444'    : '#000',
+                    padding: '0 24px',
+                    background: sending || !reply.trim() ? 'transparent' : BRAND.gold,
+                    color:      sending || !reply.trim() ? BRAND.textDim : '#000',
+                    border:     `1px solid ${sending || !reply.trim() ? BRAND.border : BRAND.gold}`,
+                    fontSize:   10,
+                    fontWeight: 700,
+                    letterSpacing: '0.25em',
+                    textTransform: 'uppercase',
+                    fontFamily: FONT_BODY,
                     cursor:     sending || !reply.trim() ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    if (sending || !reply.trim()) return
+                    e.currentTarget.style.boxShadow = `0 0 24px ${BRAND.goldGlow}`
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.boxShadow = 'none'
                   }}>
                   {sending ? '…' : 'Send'}
                 </button>
@@ -719,6 +853,6 @@ export default function DMInbox() {
           )}
         </div>
       </div>
-    </div>
+    </PageBackground>
   )
 }

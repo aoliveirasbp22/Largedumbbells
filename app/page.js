@@ -2,30 +2,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-
-const DumbbellIcon = ({ size = 40 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <rect x="2"  y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="19" y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="5"  y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="17" y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="7"  y="11" width="10" height="2" rx="1" fill="#B8935A"/>
-  </svg>
-)
-
-const ChatIcon = ({ size = 22, color = '#B8935A' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-
-const PhoneIcon = ({ size = 22, color = '#B8935A' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.29 6.29l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
+import { useRouter } from 'next/navigation'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  CornerBracket, Eyebrow, GoldRule, DisplayHeading, PageBackground,
+} from '@/lib/brand'
 
 const FIELD_IDS = {
   struggle: 'WtsEP55kDKmuYvjR3cRM',
@@ -34,7 +15,7 @@ const FIELD_IDS = {
   invest:   'xLhl7frOJAopwN0r94gX',
 }
 
-// ─── Timezone helpers ───
+// ─── Timezone helpers ─────────────────────────────────────────────────
 const COUNTRY_TIMEZONES = {
   '1876':'America/Jamaica','1868':'America/Port_of_Spain','1246':'America/Barbados',
   '213':'Africa/Algiers','216':'Africa/Tunis','218':'Africa/Tripoli',
@@ -86,16 +67,15 @@ function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
 }
 
-// ─── Interactive mini line chart with hover tooltip ──────────────────
-function MiniChart({ series, labels, height = 60 }) {
+// ─── Chart ────────────────────────────────────────────────────────────
+function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
   const containerRef = useRef(null)
   const [hover, setHover] = useState(null)
-  // hover = { seriesIdx, pointIdx, mouseX, mouseY }
 
   if (!series.length || !series[0].data.length) {
     return (
       <div style={{ height: height + 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ fontSize: 10, color: '#333' }}>No trend data yet</p>
+        <p style={{ fontSize: 10, color: BRAND.textDim, fontFamily: FONT_BODY }}>NO TREND DATA YET</p>
       </div>
     )
   }
@@ -104,17 +84,14 @@ function MiniChart({ series, labels, height = 60 }) {
   const max = Math.max(...allValues, 1)
   const min = 0
   const range = max - min || 1
-  const W = 100
   const H = height
   const numPoints = series[0].data.length
 
-  // Compute pixel positions for each series's data points
-  // We use viewBox 0..100 but the SVG renders full width — so we need actual pixel positions
   function getPointPx(seriesIdx, pointIdx, containerWidth) {
     const s = series[seriesIdx]
     const v = s.data[pointIdx]
-    const x = (pointIdx / (s.data.length - 1 || 1)) * containerWidth
-    const y = H - ((v - min) / range) * (H - 4) - 2
+    const x = numPoints === 1 ? containerWidth / 2 : (pointIdx / (s.data.length - 1)) * containerWidth
+    const y = H - ((v - min) / range) * (H - 6) - 3
     return { x, y, value: v }
   }
 
@@ -124,12 +101,10 @@ function MiniChart({ series, labels, height = 60 }) {
     const mouseY = e.clientY - rect.top
     const containerWidth = rect.width
 
-    // Find nearest x-axis point (index)
-    const pointWidth = containerWidth / (numPoints - 1 || 1)
-    const pointIdx = Math.round(mouseX / pointWidth)
+    const pointWidth = numPoints === 1 ? containerWidth : containerWidth / (numPoints - 1)
+    const pointIdx = numPoints === 1 ? 0 : Math.round(mouseX / pointWidth)
     const clampedIdx = Math.max(0, Math.min(numPoints - 1, pointIdx))
 
-    // Find the series whose value at this point is closest to mouseY
     let nearestSeriesIdx = 0
     let nearestDist = Infinity
     series.forEach((s, idx) => {
@@ -141,20 +116,9 @@ function MiniChart({ series, labels, height = 60 }) {
       }
     })
 
-    setHover({
-      seriesIdx: nearestSeriesIdx,
-      pointIdx:  clampedIdx,
-      mouseX,
-      mouseY,
-      containerWidth,
-    })
+    setHover({ seriesIdx: nearestSeriesIdx, pointIdx: clampedIdx, mouseX, mouseY, containerWidth })
   }
 
-  function handleMouseLeave() {
-    setHover(null)
-  }
-
-  // Compute hover point's actual pixel position (for the dot and guide line)
   let hoverPoint = null
   if (hover) {
     const { x, y, value } = getPointPx(hover.seriesIdx, hover.pointIdx, hover.containerWidth)
@@ -162,7 +126,7 @@ function MiniChart({ series, labels, height = 60 }) {
       x, y, value,
       color: series[hover.seriesIdx].color,
       label: series[hover.seriesIdx].label || 'Value',
-      date:  labels[hover.pointIdx] || '',
+      date:  tooltipLabels[hover.pointIdx] || '',
     }
   }
 
@@ -171,26 +135,34 @@ function MiniChart({ series, labels, height = 60 }) {
       <div ref={containerRef}
         style={{ position: 'relative', cursor: 'crosshair' }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}>
-        <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+        onMouseLeave={() => setHover(null)}>
+        <svg width="100%" height={H} viewBox={`0 0 100 ${H}`} preserveAspectRatio="none"
           style={{ overflow: 'visible', display: 'block' }}>
           {series.map((s, idx) => {
             if (s.data.length === 0) return null
+            const isDimmed = hover && hover.seriesIdx !== idx
+            if (s.data.length === 1) {
+              const v = s.data[0]
+              const y = H - ((v - min) / range) * (H - 6) - 3
+              return (
+                <circle key={idx} cx="50" cy={y} r="2"
+                  fill={s.color}
+                  opacity={isDimmed ? 0.25 : 0.95}
+                  vectorEffect="non-scaling-stroke"
+                />
+              )
+            }
             const points = s.data.map((v, i) => {
-              const x = (i / (s.data.length - 1 || 1)) * W
-              const y = H - ((v - min) / range) * (H - 4) - 2
+              const x = (i / (s.data.length - 1)) * 100
+              const y = H - ((v - min) / range) * (H - 6) - 3
               return `${x},${y}`
             }).join(' ')
-            const isDimmed = hover && hover.seriesIdx !== idx
             return (
               <polyline key={idx}
                 points={points}
-                fill="none"
-                stroke={s.color}
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={isDimmed ? 0.25 : 0.9}
+                fill="none" stroke={s.color}
+                strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+                opacity={isDimmed ? 0.25 : 0.95}
                 vectorEffect="non-scaling-stroke"
                 style={{ transition: 'opacity 0.15s' }}
               />
@@ -198,218 +170,269 @@ function MiniChart({ series, labels, height = 60 }) {
           })}
         </svg>
 
-        {/* Vertical guide line + dot (overlay, in pixel coords) */}
         {hoverPoint && (
           <>
             <div style={{
               position: 'absolute',
-              left: hoverPoint.x,
-              top: 0,
-              width: 1,
-              height: H,
-              background: '#333',
-              pointerEvents: 'none',
+              left: hoverPoint.x, top: 0, width: 1, height: H,
+              background: BRAND.borderStrong, pointerEvents: 'none',
             }} />
             <div style={{
               position: 'absolute',
-              left: hoverPoint.x - 4,
-              top: hoverPoint.y - 4,
-              width: 8,
-              height: 8,
-              borderRadius: 999,
+              left: hoverPoint.x - 4, top: hoverPoint.y - 4,
+              width: 8, height: 8, borderRadius: 999,
               background: hoverPoint.color,
-              border: '2px solid #0a0a0a',
+              border: `2px solid ${BRAND.bg}`,
               pointerEvents: 'none',
-              boxShadow: `0 0 8px ${hoverPoint.color}88`,
+              boxShadow: `0 0 12px ${hoverPoint.color}99`,
             }} />
           </>
         )}
 
-        {/* Floating tooltip */}
         {hoverPoint && (
           <div style={{
             position: 'absolute',
-            left: Math.min(hover.mouseX + 12, hover.containerWidth - 110),
-            top: Math.max(hover.mouseY - 40, -10),
+            left: Math.min(hover.mouseX + 12, hover.containerWidth - 130),
+            top: Math.max(hover.mouseY - 44, -10),
             background: '#000',
-            border: `1px solid ${hoverPoint.color}66`,
-            borderRadius: 6,
-            padding: '6px 10px',
+            border: `1px solid ${hoverPoint.color}55`,
+            borderRadius: 4,
+            padding: '8px 12px',
             pointerEvents: 'none',
             zIndex: 10,
-            minWidth: 90,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+            minWidth: 110,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
           }}>
             <p style={{
-              fontSize: 9, color: '#888',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              marginBottom: 2,
+              fontSize: 9, color: BRAND.textMuted,
+              textTransform: 'uppercase', letterSpacing: '0.15em',
+              marginBottom: 4, fontWeight: 600,
+              fontFamily: FONT_BODY,
             }}>{hoverPoint.date}</p>
-            <p style={{ fontSize: 12, color: hoverPoint.color, fontWeight: 700 }}>
+            <p style={{
+              fontSize: 13, color: hoverPoint.color, fontWeight: 700,
+              fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums',
+            }}>
               {hoverPoint.label}: {hoverPoint.value}
             </p>
           </div>
         )}
       </div>
 
-      {/* X-axis labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-        {labels.map((l, i) => (
-          <span key={i} style={{ fontSize: 9, color: '#555', fontWeight: 500 }}>
-            {l}
-          </span>
-        ))}
+      <div style={{ position: 'relative', marginTop: 10, height: 14 }}>
+        {axisLabels.map((l, i) => {
+          if (!l) return null
+          const leftPct = axisLabels.length === 1 ? 50 : (i / (axisLabels.length - 1)) * 100
+          const isFirst = i === 0
+          const isLast = i === axisLabels.length - 1
+          return (
+            <span key={i} style={{
+              position: 'absolute',
+              left: `${leftPct}%`,
+              transform: isFirst ? 'translateX(0)' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
+              fontSize: 9,
+              color: BRAND.textDim,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+              fontFamily: FONT_BODY,
+            }}>
+              {l}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-// ─── Pipeline card ───────────────────────────────────────────────────
-function PipelineCard({ title, icon: Icon, href, stats, series, labels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
+// ─── Pipeline card ────────────────────────────────────────────────────
+function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tooltipLabels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
+  const [hovered, setHovered] = useState(false)
   return (
-    <div style={{
-      background: '#111',
-      border: '1px solid #1a1a1a',
-      borderRadius: 16,
-      padding: 28,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 20,
-      transition: 'border-color 0.2s',
-      height: '100%',
-    }}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        background: BRAND.bgCard,
+        border: `1px solid ${hovered ? BRAND.borderGold : BRAND.border}`,
+        borderRadius: 4,
+        padding: '20px 22px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+        height: '100%',
+        transition: 'border-color 0.25s ease',
+      }}>
+
+      <CornerBracket position="tl" />
+      <CornerBracket position="tr" />
+      <CornerBracket position="bl" />
+      <CornerBracket position="br" />
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 10,
-            background: '#B8935A18',
-            border: '1px solid #B8935A33',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <Icon size={22} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <Eyebrow>{phaseLabel}</Eyebrow>
+            <div style={{ marginTop: 6 }}>
+              <DisplayHeading size={24}>{title}</DisplayHeading>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <GoldRule width={32} />
+            </div>
           </div>
-          <h3 style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>{title}</h3>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11, color: '#666', fontWeight: 500 }}>
-            {rangeLabel}
-          </span>
-          <div style={{ display: 'flex', gap: 3 }}>
-            {[
-              { key: 'daily',   label: 'D' },
-              { key: 'weekly',  label: 'W' },
-              { key: 'monthly', label: 'M' },
-            ].map(t => (
-              <button key={t.key}
-                onClick={() => setTimeframe(t.key)}
-                style={{
-                  background: timeframe === t.key ? '#B8935A' : 'transparent',
-                  color: timeframe === t.key ? '#000' : '#666',
-                  border: `1px solid ${timeframe === t.key ? '#B8935A' : '#333'}`,
-                  width: 28, height: 24, borderRadius: 6,
-                  fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                }}>{t.label}</button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <span style={{
+              fontSize: 10, color: BRAND.textMuted, fontWeight: 600,
+              letterSpacing: '0.15em', textTransform: 'uppercase',
+              fontFamily: FONT_BODY,
+            }}>
+              {rangeLabel}
+            </span>
+            <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}`, borderRadius: 2 }}>
+              {[
+                { key: 'weekly',  label: 'W' },
+                { key: 'monthly', label: 'M' },
+              ].map((t, i) => {
+                const active = timeframe === t.key
+                return (
+                  <button key={t.key}
+                    onClick={() => setTimeframe(t.key)}
+                    style={{
+                      background: active ? BRAND.gold : 'transparent',
+                      color: active ? '#000' : BRAND.textMuted,
+                      border: 'none',
+                      borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                      width: 30, height: 26,
+                      fontSize: 11, fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      cursor: 'pointer',
+                      fontFamily: FONT_BODY,
+                      transition: 'all 0.15s',
+                    }}>{t.label}</button>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${stats.length}, 1fr)`,
-        gap: 12,
+        gap: 1,
+        background: BRAND.border,
+        padding: 1,
       }}>
         {stats.map(s => (
-          <div key={s.label}>
-            <p style={{ fontSize: 30, fontWeight: 700, color: s.color, lineHeight: 1 }}>
+          <div key={s.label} style={{
+            background: BRAND.bgRaised,
+            padding: '12px 14px',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+              background: `linear-gradient(90deg, transparent, ${s.color}aa, transparent)`,
+              opacity: 0.5,
+            }} />
+            <p style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 26, fontWeight: 400,
+              color: s.color, lineHeight: 1,
+              letterSpacing: '0.02em',
+              fontVariantNumeric: 'tabular-nums',
+              margin: 0,
+            }}>
               {s.value}
             </p>
-            <p style={{
-              fontSize: 9, color: '#666',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              fontWeight: 600, marginTop: 8,
-            }}>
+            <Eyebrow color={BRAND.textMuted} style={{ marginTop: 6, letterSpacing: '0.2em', fontSize: 9 }}>
               {s.label}
-            </p>
+            </Eyebrow>
           </div>
         ))}
       </div>
 
-      {/* Mini chart */}
+      {/* Trend chart */}
       <div>
-        <p style={{
-          fontSize: 9, color: '#444', marginBottom: 6,
-          textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600,
-        }}>Trend</p>
-        <MiniChart series={series} labels={labels} />
+        <Eyebrow color={BRAND.textDim} style={{ marginBottom: 8, letterSpacing: '0.3em', fontSize: 9 }}>Trend</Eyebrow>
+        <MiniChart series={series} axisLabels={axisLabels} tooltipLabels={tooltipLabels} />
       </div>
 
-      {/* List section */}
+      {/* List */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <p style={{
-          fontSize: 9, color: '#444', marginBottom: 10,
-          textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600,
-        }}>{listTitle}</p>
+        <Eyebrow color={BRAND.textDim} style={{ marginBottom: 10, letterSpacing: '0.3em', fontSize: 9 }}>
+          {listTitle}
+        </Eyebrow>
         {listItems.length === 0 ? (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px dashed #222', borderRadius: 8, padding: 16,
+            border: `1px dashed ${BRAND.border}`, padding: 20,
           }}>
-            <p style={{ fontSize: 11, color: '#444', fontStyle: 'italic' }}>{emptyText}</p>
+            <p style={{
+              fontSize: 11, color: BRAND.textDim, fontStyle: 'italic',
+              fontFamily: FONT_BODY,
+            }}>{emptyText}</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: BRAND.border }}>
             {listItems.slice(0, 3).map((item, i) => renderListItem(item, i))}
           </div>
         )}
       </div>
 
-      {/* Open button */}
+      {/* CTA */}
       <Link href={href}
         style={{
-          background: '#B8935A',
-          color: '#000',
+          background: 'transparent',
+          color: BRAND.gold,
           padding: '10px 18px',
-          borderRadius: 10,
-          fontSize: 13,
-          fontWeight: 600,
+          border: `1px solid ${BRAND.gold}`,
+          fontFamily: FONT_BODY,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.25em',
+          textTransform: 'uppercase',
           textAlign: 'center',
           textDecoration: 'none',
-          transition: 'all 0.15s',
-          letterSpacing: '0.02em',
+          transition: 'all 0.2s ease',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
         }}
-        onMouseEnter={e => { e.currentTarget.style.background = '#a8824a' }}
-        onMouseLeave={e => { e.currentTarget.style.background = '#B8935A' }}>
-        Open Pipeline →
+        onMouseEnter={e => {
+          e.currentTarget.style.background = BRAND.gold
+          e.currentTarget.style.color = '#000'
+          e.currentTarget.style.boxShadow = `0 0 24px ${BRAND.goldGlow}`
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = BRAND.gold
+          e.currentTarget.style.boxShadow = 'none'
+        }}>
+        <span>Open Pipeline</span>
+        <span style={{ fontSize: 14 }}>→</span>
       </Link>
     </div>
   )
 }
 
-// ─── Date helpers ────────────────────────────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────
 function getBuckets(timeframe) {
   const buckets = []
   const now = new Date()
-  if (timeframe === 'daily') {
+  if (timeframe === 'weekly') {
     for (let i = 6; i >= 0; i--) {
       const start = new Date(now); start.setDate(now.getDate() - i); start.setHours(0,0,0,0)
       const end = new Date(start); end.setDate(start.getDate() + 1)
       buckets.push({ start, end })
     }
-  } else if (timeframe === 'weekly') {
-    for (let i = 5; i >= 0; i--) {
-      const start = new Date(now); start.setDate(now.getDate() - (i + 1) * 7); start.setHours(0,0,0,0)
-      const end = new Date(start); end.setDate(start.getDate() + 7)
-      buckets.push({ start, end })
-    }
   } else {
-    for (let i = 5; i >= 0; i--) {
-      const start = new Date(now); start.setDate(now.getDate() - (i + 1) * 30); start.setHours(0,0,0,0)
-      const end = new Date(start); end.setDate(start.getDate() + 30)
+    for (let i = 29; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - i); start.setHours(0,0,0,0)
+      const end = new Date(start); end.setDate(start.getDate() + 1)
       buckets.push({ start, end })
     }
   }
@@ -417,45 +440,38 @@ function getBuckets(timeframe) {
 }
 
 function getBucketLabels(timeframe, buckets) {
-  if (timeframe === 'daily') {
+  if (timeframe === 'weekly') {
     return buckets.map(b => b.start.toLocaleDateString('en-US', { weekday: 'short' }))
   }
-  if (timeframe === 'weekly') {
-    return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
-  }
-  return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'short' }))
+  const totalLabels = 5
+  const step = (buckets.length - 1) / (totalLabels - 1)
+  const labelIndices = new Set(
+    Array.from({ length: totalLabels }, (_, i) => Math.round(i * step))
+  )
+  return buckets.map((b, i) => {
+    if (!labelIndices.has(i)) return ''
+    return b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  })
 }
 
 function getDetailedLabels(timeframe, buckets) {
-  // Used in tooltip — more readable
-  if (timeframe === 'daily') {
-    return buckets.map(b => b.start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))
-  }
-  if (timeframe === 'weekly') {
-    return buckets.map(b => `Week of ${b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`)
-  }
-  return buckets.map(b => b.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))
+  return buckets.map(b => b.start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))
 }
 
 function getRangeLabel(timeframe) {
   const now = new Date()
   const opts = { month: 'short', day: 'numeric' }
-  if (timeframe === 'daily') {
+  if (timeframe === 'weekly') {
     const start = new Date(now); start.setDate(now.getDate() - 6)
     return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
   }
-  if (timeframe === 'weekly') {
-    const start = new Date(now); start.setDate(now.getDate() - 42)
-    return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
-  }
-  const start = new Date(now); start.setDate(now.getDate() - 180)
+  const start = new Date(now); start.setDate(now.getDate() - 29)
   return `${start.toLocaleDateString('en-US', opts)} – ${now.toLocaleDateString('en-US', opts)}`
 }
 
 function currentRangeStart(timeframe) {
   const now = new Date()
   const start = new Date(now)
-  if (timeframe === 'daily')   start.setHours(0,0,0,0)
   if (timeframe === 'weekly')  start.setDate(now.getDate() - 7)
   if (timeframe === 'monthly') start.setDate(now.getDate() - 30)
   return start
@@ -472,15 +488,17 @@ function timeAgoShort(dateStr) {
   return `${days}d`
 }
 
-// ─── Main ────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────
 export default function Home() {
-  const [dmTimeframe, setDmTimeframe] = useState('daily')
-  const [outreachTimeframe, setOutreachTimeframe] = useState('daily')
+  const router = useRouter()
+  const [dmTimeframe, setDmTimeframe] = useState('weekly')
+  const [outreachTimeframe, setOutreachTimeframe] = useState('weekly')
 
   const [leads, setLeads] = useState([])
   const [messages, setMessages] = useState([])
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({})
+  const [callLogsList, setCallLogsList] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchAll() }, [])
@@ -502,65 +520,61 @@ export default function Home() {
       const logsMap = {}
       logs?.forEach(log => { logsMap[log.ghl_contact_id] = log })
       setCallLogs(logsMap)
+      setCallLogsList(logs || [])
     } catch (err) { console.error('Fetch error:', err) }
     setLoading(false)
   }
 
-  // ─── DM stats ─────────────────────────────────────────────────────
+  function openInboxConversation(leadId) {
+    try {
+      const existing = JSON.parse(localStorage.getItem('inboxState') || '{}')
+      localStorage.setItem('inboxState', JSON.stringify({
+        ...existing,
+        selectedLeadId: leadId,
+      }))
+    } catch {
+      localStorage.setItem('inboxState', JSON.stringify({ selectedLeadId: leadId }))
+    }
+    router.push('/inbox')
+  }
+
+  // ─── DM stats ───────────────────────────────────────────────────────
   const dmStart = currentRangeStart(dmTimeframe)
   const dmLeadsInRange = leads.filter(l => new Date(l.created_at) >= dmStart)
 
-  const dmMessages   = dmLeadsInRange.length
-  const dmQualifying = dmLeadsInRange.filter(l => l.status === 'qualifying' || l.status === 'new').length
-  const dmLinkSent   = dmLeadsInRange.filter(l => l.status === 'link sent').length
-  const dmBooked     = dmLeadsInRange.filter(l => l.status === 'booked').length
-
   const dmStats = [
-    { label: 'Messages',   value: dmMessages,   color: '#B8935A' },
-    { label: 'Qualifying', value: dmQualifying, color: '#378ADD' },
-    { label: 'Link Sent',  value: dmLinkSent,   color: '#9B59B6' },
-    { label: 'Booked',     value: dmBooked,     color: '#2ECC71' },
+    { label: 'Messages',   value: dmLeadsInRange.length, color: BRAND.gold },
+    { label: 'Qualifying', value: dmLeadsInRange.filter(l => l.status === 'qualifying' || l.status === 'new').length, color: BRAND.statusNew },
+    { label: 'Link Sent',  value: dmLeadsInRange.filter(l => l.status === 'link sent').length, color: BRAND.statusLinkSent },
+    { label: 'Booked',     value: dmLeadsInRange.filter(l => l.status === 'booked').length, color: BRAND.statusBooked },
   ]
 
   const dmBuckets = getBuckets(dmTimeframe)
   const dmLabels  = getBucketLabels(dmTimeframe, dmBuckets)
   const dmDetailedLabels = getDetailedLabels(dmTimeframe, dmBuckets)
   const dmSeries = [
-    {
-      label: 'Messages',
-      color: '#B8935A',
+    { label: 'Messages', color: BRAND.gold,
       data: dmBuckets.map(b => leads.filter(l => {
-        const t = new Date(l.created_at)
-        return t >= b.start && t < b.end
-      }).length),
-    },
-    {
-      label: 'Qualifying',
-      color: '#378ADD',
+        const t = new Date(l.created_at); return t >= b.start && t < b.end
+      }).length) },
+    { label: 'Qualifying', color: BRAND.statusNew,
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && (l.status === 'qualifying' || l.status === 'new')
-      }).length),
-    },
-    {
-      label: 'Link Sent',
-      color: '#9B59B6',
+      }).length) },
+    { label: 'Link Sent', color: BRAND.statusLinkSent,
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && l.status === 'link sent'
-      }).length),
-    },
-    {
-      label: 'Booked',
-      color: '#2ECC71',
+      }).length) },
+    { label: 'Booked', color: BRAND.statusBooked,
       data: dmBuckets.map(b => leads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && l.status === 'booked'
-      }).length),
-    },
+      }).length) },
   ]
 
-  // ─── Top DMs awaiting reply ───────────────────────────────────────
+  // ─── Awaiting reply ─────────────────────────────────────────────────
   const dmsByLead = {}
   messages.forEach(m => {
     if (!dmsByLead[m.lead_id] || new Date(m.created_at) > new Date(dmsByLead[m.lead_id].created_at)) {
@@ -582,104 +596,109 @@ export default function Home() {
     const avatar = lead.profile_pic_url
     const initial = (lead.name || lead.ig_handle || '?')[0].toUpperCase()
     return (
-      <div key={lead.id} style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 10px',
-        background: '#0d0d0d', border: '1px solid #1a1a1a',
-        borderRadius: 8,
-      }}>
+      <div key={lead.id}
+        onClick={() => openInboxConversation(lead.id)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '10px 14px',
+          background: BRAND.bgRaised,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = BRAND.bgCardHover }}
+        onMouseLeave={e => { e.currentTarget.style.background = BRAND.bgRaised }}>
         {avatar ? (
           <img src={avatar} alt="" style={{
-            width: 32, height: 32, borderRadius: 999, objectFit: 'cover', flexShrink: 0,
+            width: 28, height: 28, borderRadius: 999, objectFit: 'cover', flexShrink: 0,
+            border: `1px solid ${BRAND.border}`,
           }} onError={e => { e.currentTarget.style.display = 'none' }} />
         ) : (
           <div style={{
-            width: 32, height: 32, borderRadius: 999, flexShrink: 0,
-            background: '#B8935A22', color: '#B8935A',
-            border: '1px solid #B8935A44',
+            width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+            background: 'transparent',
+            color: BRAND.gold,
+            border: `1px solid ${BRAND.borderGold}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 700,
+            fontSize: 12, fontWeight: 700, fontFamily: FONT_BODY,
           }}>{initial}</div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 12, color: '#e0e0e0', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{
+            fontSize: 12, color: BRAND.textPrimary, fontWeight: 500,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            fontFamily: FONT_BODY, letterSpacing: '0.02em',
+          }}>
             @{lead.ig_handle || lead.name || 'unknown'}
           </p>
-          <p style={{ fontSize: 11, color: '#777', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {lastMsg.body || lastMsg.message || '(media)'}
+          <p style={{
+            fontSize: 10, color: BRAND.textMuted, marginTop: 1,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            fontFamily: FONT_BODY,
+          }}>
+            {lastMsg.body || lastMsg.message || lastMsg.content || '(media)'}
           </p>
         </div>
-        <span style={{ fontSize: 10, color: '#555', flexShrink: 0 }}>
+        <span style={{
+          fontSize: 10, color: BRAND.textDim, flexShrink: 0,
+          fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+          fontFamily: FONT_BODY,
+        }}>
           {timeAgoShort(lastMsg.created_at)}
         </span>
       </div>
     )
   }
 
-  // ─── Outreach stats ───────────────────────────────────────────────
+  // ─── Outreach stats ─────────────────────────────────────────────────
   const outreachStart = currentRangeStart(outreachTimeframe)
-  const outreachInRange = contacts.filter(c => new Date(c.dateAdded) >= outreachStart)
-
   const calledTags = ['called once','called twice','called three times','call back','not interested','booked']
-  const totalLeads = outreachInRange.length
-  const calledCount = outreachInRange.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
-  const bookedCount = outreachInRange.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
+  const contactsInRange = contacts.filter(c => new Date(c.dateAdded) >= outreachStart)
+  const callsInRange = callLogsList.filter(log => {
+    if (!log.last_contacted) return false
+    return new Date(log.last_contacted) >= outreachStart
+  })
 
   const outreachStats = [
-    { label: 'Total Leads', value: totalLeads,  color: '#B8935A' },
-    { label: 'Called',      value: calledCount, color: '#378ADD' },
-    { label: 'Booked',      value: bookedCount, color: '#2ECC71' },
+    { label: 'Total Leads', value: contactsInRange.length, color: BRAND.gold },
+    { label: 'Called',      value: callsInRange.filter(log => calledTags.includes(log.tag)).length, color: BRAND.statusNew },
+    { label: 'Booked',      value: callsInRange.filter(log => log.tag === 'booked').length, color: BRAND.statusBooked },
   ]
 
   const outreachBuckets = getBuckets(outreachTimeframe)
   const outreachLabels  = getBucketLabels(outreachTimeframe, outreachBuckets)
   const outreachDetailedLabels = getDetailedLabels(outreachTimeframe, outreachBuckets)
   const outreachSeries = [
-    {
-      label: 'Total Leads',
-      color: '#B8935A',
+    { label: 'Total Leads', color: BRAND.gold,
       data: outreachBuckets.map(b => contacts.filter(c => {
-        const t = new Date(c.dateAdded)
-        return t >= b.start && t < b.end
-      }).length),
-    },
-    {
-      label: 'Called',
-      color: '#378ADD',
-      data: outreachBuckets.map(b => contacts.filter(c => {
-        const t = new Date(c.dateAdded)
-        return t >= b.start && t < b.end && calledTags.includes(callLogs[c.id]?.tag || 'uncalled')
-      }).length),
-    },
-    {
-      label: 'Booked',
-      color: '#2ECC71',
-      data: outreachBuckets.map(b => contacts.filter(c => {
-        const t = new Date(c.dateAdded)
-        return t >= b.start && t < b.end && (callLogs[c.id]?.tag || 'uncalled') === 'booked'
-      }).length),
-    },
+        const t = new Date(c.dateAdded); return t >= b.start && t < b.end
+      }).length) },
+    { label: 'Called', color: BRAND.statusNew,
+      data: outreachBuckets.map(b => callLogsList.filter(log => {
+        if (!log.last_contacted) return false
+        const t = new Date(log.last_contacted)
+        return t >= b.start && t < b.end && calledTags.includes(log.tag)
+      }).length) },
+    { label: 'Booked', color: BRAND.statusBooked,
+      data: outreachBuckets.map(b => callLogsList.filter(log => {
+        if (!log.last_contacted) return false
+        const t = new Date(log.last_contacted)
+        return t >= b.start && t < b.end && log.tag === 'booked'
+      }).length) },
   ]
 
-  // ─── Top leads for outreach (strongest leads) ─────────────────────
   const strongestLeads = contacts
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
       if (['booked', 'not interested', 'called three times'].includes(tag)) return false
-
       const invest = getField(c.customFields, FIELD_IDS.invest)
       if (!invest || !invest.toLowerCase().includes('yes')) return false
-
       const botheredRaw = getField(c.customFields, FIELD_IDS.bothered)
       const bothered = parseInt(botheredRaw)
       if (isNaN(bothered) || bothered < 4) return false
-
       const ageRaw = getField(c.customFields, FIELD_IDS.age)
       const age = parseInt(ageRaw)
       if (isNaN(age) || age < 22 || age > 45) return false
-
       if (!isInGreenWindow(c.phone)) return false
-
       return true
     })
     .map(c => ({
@@ -695,112 +714,134 @@ export default function Home() {
 
   function renderLeadItem({ contact, bothered, age, tag }, i) {
     const tagColors = {
-      uncalled: '#888',
-      'called once': '#378ADD',
-      'called twice': '#F0A500',
-      'call back': '#9B59B6',
+      uncalled: BRAND.textMuted,
+      'called once': BRAND.statusNew,
+      'called twice': BRAND.statusQualifying,
+      'call back': BRAND.statusLinkSent,
     }
-    const tagColor = tagColors[tag] || '#888'
+    const tagColor = tagColors[tag] || BRAND.textMuted
     const initial = (contact.contactName || '?')[0].toUpperCase()
     return (
-      <div key={contact.id} style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 10px',
-        background: '#0d0d0d', border: '1px solid #1a1a1a',
-        borderRadius: 8,
-      }}>
+      <Link key={contact.id}
+        href={`/calls/${contact.id}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '10px 14px',
+          background: BRAND.bgRaised,
+          textDecoration: 'none',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = BRAND.bgCardHover }}
+        onMouseLeave={e => { e.currentTarget.style.background = BRAND.bgRaised }}>
         <div style={{
-          width: 32, height: 32, borderRadius: 999, flexShrink: 0,
-          background: '#B8935A22', color: '#B8935A',
-          border: '1px solid #B8935A44',
+          width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+          background: 'transparent',
+          color: BRAND.gold,
+          border: `1px solid ${BRAND.borderGold}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12, fontWeight: 700,
+          fontSize: 12, fontWeight: 700, fontFamily: FONT_BODY,
         }}>{initial}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 12, color: '#e0e0e0', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{
+            fontSize: 12, color: BRAND.textPrimary, fontWeight: 500,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            fontFamily: FONT_BODY, letterSpacing: '0.02em',
+          }}>
             {contact.contactName || 'Unknown'}
           </p>
-          <p style={{ fontSize: 10, color: '#777' }}>
-            {age}y · Bothered {bothered}/5 · 🟢 Good to call
+          <p style={{
+            fontSize: 9, color: BRAND.textMuted, marginTop: 1,
+            fontFamily: FONT_BODY, letterSpacing: '0.05em',
+          }}>
+            {age}Y · BOTHERED {bothered}/5 · <span style={{ color: BRAND.statusBooked }}>● </span>GOOD TO CALL
           </p>
         </div>
         <span style={{
-          fontSize: 10, padding: '2px 8px', borderRadius: 999,
-          background: `${tagColor}22`, color: tagColor,
-          border: `1px solid ${tagColor}44`, flexShrink: 0,
+          fontSize: 9, padding: '3px 8px',
+          background: `${tagColor}15`, color: tagColor,
+          border: `1px solid ${tagColor}33`,
+          fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase',
+          fontFamily: FONT_BODY,
+          flexShrink: 0,
         }}>{tag}</span>
-      </div>
+      </Link>
     )
   }
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 70px)', background: '#0a0a0a', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Top banner */}
+    <PageBackground style={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
+      {/* Hero header */}
       <div style={{
-        padding: '32px 24px 20px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+        padding: '24px 24px 20px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
       }}>
-        <DumbbellIcon size={48} />
-        <h1 style={{
-          fontWeight: 800,
-          letterSpacing: '0.18em',
-          fontSize: 28,
-          color: '#fff',
-          textAlign: 'center',
+        <div style={{
+          width: 64, height: 64,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          LARGE DUMBBELLS
-        </h1>
-      </div>
+          <img
+            src="/logo-large-dumbbells.png"
+            alt="Large Dumbbells"
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          />
+        </div>
 
-      {/* Sales Pipeline header */}
-      <div style={{ textAlign: 'center', padding: '8px 24px 20px' }}>
-        <p style={{
-          fontSize: 22, fontWeight: 700, letterSpacing: '0.2em',
-          color: '#B8935A', textTransform: 'uppercase',
-        }}>Sales Pipeline</p>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <Eyebrow style={{ fontSize: 10, letterSpacing: '0.4em' }}>The Command Center</Eyebrow>
+          <DisplayHeading size={44} style={{ letterSpacing: '0.04em', lineHeight: 0.95 }}>
+            Sales <span style={{ color: BRAND.gold }}>Pipeline</span>
+          </DisplayHeading>
+        </div>
       </div>
 
       <div style={{
-        flex: 1, padding: '0 24px 24px',
+        flex: 1, padding: '8px 24px 24px',
         maxWidth: 1600, width: '100%', margin: '0 auto',
         display: 'flex', flexDirection: 'column',
       }}>
         {loading ? (
-          <p style={{ textAlign: 'center', color: '#555', fontSize: 14 }}>Loading…</p>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: 80, gap: 16,
+          }}>
+            <Eyebrow color={BRAND.textDim}>Loading</Eyebrow>
+            <div style={{ width: 32, height: 1, background: BRAND.gold }} />
+          </div>
         ) : (
           <div style={{
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(520px, 1fr))',
             gap: 24,
           }}>
             <PipelineCard
+              phaseLabel="Phase One — Inbound"
               title="DM Pipeline"
-              icon={ChatIcon}
               href="/inbox"
               stats={dmStats}
               series={dmSeries}
-              labels={dmDetailedLabels}
+              axisLabels={dmLabels}
+              tooltipLabels={dmDetailedLabels}
               timeframe={dmTimeframe}
               setTimeframe={setDmTimeframe}
               rangeLabel={getRangeLabel(dmTimeframe)}
-              listTitle="DMs awaiting your reply"
+              listTitle="DMs Awaiting Your Reply"
               listItems={awaitingReply}
               renderListItem={renderDmItem}
               emptyText="No DMs awaiting reply"
             />
             <PipelineCard
+              phaseLabel="Phase Two — Outbound"
               title="Outreach Pipeline"
-              icon={PhoneIcon}
               href="/calls"
               stats={outreachStats}
               series={outreachSeries}
-              labels={outreachDetailedLabels}
+              axisLabels={outreachLabels}
+              tooltipLabels={outreachDetailedLabels}
               timeframe={outreachTimeframe}
               setTimeframe={setOutreachTimeframe}
               rangeLabel={getRangeLabel(outreachTimeframe)}
-              listTitle="Strongest leads to call now"
+              listTitle="Strongest Leads To Call Now"
               listItems={strongestLeads}
               renderListItem={renderLeadItem}
               emptyText="No leads match criteria right now"
@@ -808,6 +849,6 @@ export default function Home() {
           </div>
         )}
       </div>
-    </div>
+    </PageBackground>
   )
 }

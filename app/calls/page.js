@@ -3,14 +3,21 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  TAG_COLORS,
+  Eyebrow, DisplayHeading, PageBackground, PageHeader, BrandButton,
+  CornerBracket, GoldRule,
+} from '@/lib/brand'
 
 const FIELD_IDS = {
   struggle: 'WtsEP55kDKmuYvjR3cRM',
   bothered: 'b9izCUDE2DcOqViZ6Da4',
-  age: 'gvlEzRdj7FhoOw6Yk0p6',
-  invest: 'xLhl7frOJAopwN0r94gX'
+  age:      'gvlEzRdj7FhoOw6Yk0p6',
+  invest:   'xLhl7frOJAopwN0r94gX'
 }
 
+// ─── Country codes ─────────────────────────────────────────────────────
 const COUNTRY_CODES = {
   AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AD:'Andorra',AO:'Angola',AG:'Antigua and Barbuda',
   AR:'Argentina',AM:'Armenia',AU:'Australia',AT:'Austria',AZ:'Azerbaijan',BS:'Bahamas',
@@ -45,6 +52,7 @@ const COUNTRY_CODES = {
   VU:'Vanuatu',VE:'Venezuela',VN:'Vietnam',YE:'Yemen',ZM:'Zambia',ZW:'Zimbabwe'
 }
 
+// ─── Timezone helpers ──────────────────────────────────────────────────
 const COUNTRY_TIMEZONES = {
   '1876': 'America/Jamaica','1868': 'America/Port_of_Spain','1246': 'America/Barbados',
   '1242': 'America/Nassau','1264': 'America/Anguilla','1268': 'America/Antigua',
@@ -246,7 +254,11 @@ function getLocalTimeInfo(timezone) {
   } catch { return null }
 }
 
-const DOT_COLORS = { green: '#2ECC71', yellow: '#F0A500', red: '#E74C3C' }
+const DOT_COLORS = {
+  green:  BRAND.statusBooked,
+  yellow: BRAND.statusQualifying,
+  red:    BRAND.statusDisqualified,
+}
 
 function LocalTimeCell({ phone }) {
   const [info, setInfo] = useState(null)
@@ -259,15 +271,18 @@ function LocalTimeCell({ phone }) {
     return () => clearInterval(id)
   }, [phone])
   if (!info) {
-    return <td className="px-4 py-3 text-xs" style={{ color: '#444' }}>—</td>
+    return <td style={{ padding: '10px 14px', fontSize: 11, color: BRAND.textDim, fontFamily: FONT_BODY }}>—</td>
   }
   return (
-    <td className="px-4 py-3">
-      <div className="flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ background: DOT_COLORS[info.color], boxShadow: `0 0 5px ${DOT_COLORS[info.color]}99` }} />
-        <span className="text-xs" style={{ color: '#aaa' }}>{info.time}</span>
-        <span className="text-xs" style={{ color: '#555' }}>{info.tz}</span>
+    <td style={{ padding: '10px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+          background: DOT_COLORS[info.color],
+          boxShadow: `0 0 6px ${DOT_COLORS[info.color]}99`,
+        }} />
+        <span style={{ fontSize: 11, color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>{info.time}</span>
+        <span style={{ fontSize: 10, color: BRAND.textDim, fontFamily: FONT_BODY, letterSpacing: '0.05em' }}>{info.tz}</span>
       </div>
     </td>
   )
@@ -290,47 +305,61 @@ function ColumnFilter({ open, onClose, options, selected, onToggle, formatLabel,
   return (
     <div ref={ref}
       onClick={e => e.stopPropagation()}
-      className="absolute top-full left-0 mt-1 rounded-lg shadow-2xl"
       style={{
-        background: '#1a1a1a', border: '1px solid #333', zIndex: 100,
-        minWidth: '200px', maxHeight: '320px',
-        display: 'flex', flexDirection: 'column', padding: '6px',
+        position: 'absolute', top: '100%', left: 0, marginTop: 4,
+        background: BRAND.bgRaised, border: `1px solid ${BRAND.borderStrong}`,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
+        zIndex: 100,
+        minWidth: 220, maxHeight: 320,
+        display: 'flex', flexDirection: 'column', padding: 6,
       }}>
       {searchable && (
         <input autoFocus value={search}
           onChange={e => setSearch(e.target.value)}
           onClick={e => e.stopPropagation()}
-          placeholder="Search…"
-          className="text-xs px-2 py-1.5 rounded mb-1 focus:outline-none"
-          style={{ background: '#0d0d0d', color: '#e0e0e0', border: '1px solid #333' }}
+          placeholder="SEARCH…"
+          style={{
+            fontSize: 10, letterSpacing: '0.15em',
+            padding: '6px 10px', marginBottom: 4,
+            background: BRAND.bg, color: BRAND.textPrimary,
+            border: `1px solid ${BRAND.border}`,
+            fontFamily: FONT_BODY, outline: 'none',
+          }}
         />
       )}
       <div style={{ overflowY: 'auto', flex: 1 }}>
         {filteredOptions.length === 0 && (
-          <p className="text-xs px-2 py-2" style={{ color: '#555' }}>No options</p>
+          <p style={{ fontSize: 11, padding: '6px 10px', color: BRAND.textDim, fontFamily: FONT_BODY }}>No options</p>
         )}
         {filteredOptions.map(opt => {
           const isChecked = selected.includes(opt)
           return (
             <div key={opt} onClick={() => onToggle(opt)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs select-none"
               style={{
-                background: isChecked ? '#B8935A22' : 'transparent',
-                color: isChecked ? '#B8935A' : '#ccc',
+                width: '100%',
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 8px',
+                fontSize: 11,
+                background: isChecked ? 'rgba(176, 131, 74, 0.13)' : 'transparent',
+                color: isChecked ? BRAND.gold : BRAND.textSecondary,
+                fontFamily: FONT_BODY,
                 cursor: 'pointer',
+                userSelect: 'none',
               }}
-              onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#222' }}
+              onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = BRAND.bgCardHover }}
               onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent' }}>
               <span style={{
-                width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-                background: isChecked ? '#B8935A' : 'transparent',
-                border: `1px solid ${isChecked ? '#B8935A' : '#555'}`,
+                width: 12, height: 12, flexShrink: 0,
+                background: isChecked ? BRAND.gold : 'transparent',
+                border: `1px solid ${isChecked ? BRAND.gold : BRAND.borderStrong}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, color: '#000',
+                fontSize: 9, color: '#000', fontWeight: 700,
               }}>
                 {isChecked && '✓'}
               </span>
-              <span className="truncate">{formatLabel ? formatLabel(opt) : opt}</span>
+              <span style={{
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{formatLabel ? formatLabel(opt) : opt}</span>
             </div>
           )
         })}
@@ -357,17 +386,21 @@ function NotesCell({ contactId, initialNote, onSave }) {
     debounceRef.current = setTimeout(() => onSave(contactId, next), 800)
   }
   return (
-    <td className="px-4 py-3" style={{ verticalAlign: 'top' }}>
+    <td style={{ padding: '10px 14px', verticalAlign: 'top' }}>
       <textarea ref={textareaRef} value={value}
         onChange={handleChange}
         onClick={e => e.stopPropagation()}
         placeholder="Add note…" rows={1}
-        className="text-xs rounded px-2 py-1 w-full resize-none focus:outline-none"
         style={{
-          background: 'transparent', color: '#aaa', border: '1px solid transparent',
-          minWidth: '160px', lineHeight: '1.5', overflow: 'hidden', transition: 'border-color 0.15s',
+          fontSize: 11,
+          padding: '4px 8px', width: '100%', resize: 'none', outline: 'none',
+          background: 'transparent', color: BRAND.textSecondary,
+          border: `1px solid transparent`,
+          fontFamily: FONT_BODY, lineHeight: 1.5,
+          overflow: 'hidden', minWidth: 160,
+          transition: 'all 0.15s',
         }}
-        onFocus={e => { e.target.style.borderColor = '#B8935A44'; e.target.style.background = '#1a1a1a' }}
+        onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong; e.target.style.background = BRAND.bgRaised }}
         onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent' }}
       />
     </td>
@@ -410,8 +443,8 @@ export default function Calls() {
   const [hydrated, setHydrated] = useState(false)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('created')
-  const [timeframe, setTimeframe] = useState('daily')
-  const [perPage, setPerPage] = useState(10)
+  const [timeframe, setTimeframe] = useState('weekly')
+  const [perPage, setPerPage] = useState(20)
   const [page, setPage] = useState(1)
   const [selectedRow, setSelectedRow] = useState(null)
 
@@ -440,7 +473,7 @@ export default function Calls() {
 
   useEffect(() => { fetchData() }, [])
 
-  // ─── Hydrate from localStorage ONCE on mount ────────────
+  // Hydrate from localStorage ONCE on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem('callsListState')
@@ -460,7 +493,7 @@ export default function Calls() {
     setHydrated(true)
   }, [])
 
-  // ─── Save state on every change (after hydration) ────────────
+  // Save state on every change (after hydration)
   useEffect(() => {
     if (!hydrated) return
     try {
@@ -472,7 +505,7 @@ export default function Calls() {
     }
   }, [hydrated, search, sortBy, timeframe, perPage, page, filters, selectedRow])
 
-  // ─── Scroll to highlighted row when restored ──────────────────────
+  // Scroll to highlighted row when restored
   useEffect(() => {
     if (!loading && selectedRow) {
       setTimeout(() => {
@@ -518,8 +551,6 @@ export default function Calls() {
       await supabase.from('call_logs').insert({ ghl_contact_id: contactId, tag, last_contacted: now })
     }
     setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], tag, last_contacted: now } }))
-
-    // Trigger campaign enrollment logic (runs in background, won't block UI)
     handleTagChange(contactId, tag)
   }
 
@@ -533,19 +564,13 @@ export default function Calls() {
     } catch {}
   }
 
-  const tagColors = {
-    uncalled: '#555',
-    'called once': '#378ADD',
-    'called twice': '#F0A500',
-    'called three times': '#E74C3C',
-    'not interested': '#888',
-    'call back': '#9B59B6',
-    booked: '#2ECC71',
-  }
-
-  function copyToClipboard(text) {
+  const [copiedKey, setCopiedKey] = useState(null)
+  function copyToClipboard(text, key) {
     if (!text || text === '—') return
-    navigator.clipboard.writeText(text).catch(() => {})
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(prev => prev === key ? null : prev), 1400)
+    }).catch(() => {})
   }
 
   function needsCall(tag, lastContacted) {
@@ -617,37 +642,30 @@ export default function Calls() {
     })
 
   const statTotal = filtered.length
-  const statCalled = filtered.filter(c => calledTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
+  const statCalled = filtered.filter(c => {
+    const tag = callLogs[c.id]?.tag || 'uncalled'
+    return !needsCall(tag, callLogs[c.id]?.last_contacted)
+  }).length
   const statAnswered = filtered.filter(c => answeredTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
   const statBooked = filtered.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
 
   const totalPages = Math.ceil(filtered.length / perPage)
   const paginated = filtered.slice((page - 1) * perPage, page * perPage)
 
-  const DumbbellIcon = ({ size = 24 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="10" width="3" height="4" rx="1" fill="#B8935A"/>
-      <rect x="19" y="10" width="3" height="4" rx="1" fill="#B8935A"/>
-      <rect x="5" y="8" width="2" height="8" rx="1" fill="#B8935A"/>
-      <rect x="17" y="8" width="2" height="8" rx="1" fill="#B8935A"/>
-      <rect x="7" y="11" width="10" height="2" rx="1" fill="#B8935A"/>
-    </svg>
-  )
-
   const TABLE_COLS = [
-    { label: 'Name', w: '140px', filterKey: null },
+    { label: 'Name', w: '160px', filterKey: null },
     { label: 'Created', w: '160px', filterKey: null },
-    { label: 'Phone', w: '140px', filterKey: null },
-    { label: 'Email', w: '190px', filterKey: null },
+    { label: 'Phone', w: '150px', filterKey: null },
+    { label: 'Email', w: '200px', filterKey: null },
     { label: 'Biggest Struggle', w: '220px', filterKey: null },
-    { label: 'Bothered', w: '80px', filterKey: 'bothered' },
-    { label: 'Would Invest?', w: '200px', filterKey: 'invest' },
-    { label: 'Age', w: '60px', filterKey: 'age' },
-    { label: 'Country', w: '120px', filterKey: 'country' },
-    { label: 'Local Time', w: '130px', filterKey: 'callWindow' },
-    { label: 'Last Contact', w: '100px', filterKey: null },
-    { label: 'Notes', w: '180px', filterKey: null },
-    { label: 'Tag', w: '160px', filterKey: 'tag' },
+    { label: 'Bothered', w: '90px', filterKey: 'bothered' },
+    { label: 'Would Invest?', w: '210px', filterKey: 'invest' },
+    { label: 'Age', w: '70px', filterKey: 'age' },
+    { label: 'Country', w: '130px', filterKey: 'country' },
+    { label: 'Local Time', w: '140px', filterKey: 'callWindow' },
+    { label: 'Last Contact', w: '110px', filterKey: null },
+    { label: 'Notes', w: '190px', filterKey: null },
+    { label: 'Tag', w: '170px', filterKey: 'tag' },
   ]
 
   const filterOptions = {
@@ -660,93 +678,147 @@ export default function Calls() {
   }
 
   const callWindowLabels = {
-    green: '🟢 Good to call',
-    yellow: '🟡 Within 30 min',
-    red: '🔴 Outside window',
+    green:  'Good To Call',
+    yellow: 'Within 30 Min',
+    red:    'Outside Window',
+  }
+
+  const callWindowColors = {
+    green:  BRAND.statusBooked,
+    yellow: BRAND.statusQualifying,
+    red:    BRAND.statusDisqualified,
+  }
+
+  function formatCallWindowLabel(v) {
+    return (
+      <>
+        <span style={{
+          display: 'inline-block',
+          width: 6, height: 6, borderRadius: 999,
+          background: callWindowColors[v],
+          boxShadow: `0 0 6px ${callWindowColors[v]}99`,
+          marginRight: 8, verticalAlign: 'middle',
+        }} />
+        <span style={{ verticalAlign: 'middle' }}>{callWindowLabels[v]}</span>
+      </>
+    )
   }
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: '#0a0a0a' }}>
+    <PageBackground style={{ minHeight: '100vh' }}>
 
-      {/* Header */}
-      <div className="border-b px-8 py-4 flex items-center justify-between"
-        style={{ background: '#111', borderColor: '#222' }}>
+      <PageHeader
+        pageLabel="Outreach Pipeline"
+        leftSlot={
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← Home</BrandButton>
+          </Link>
+        }
+        rightSlot={
+          <Link href="/email-automation" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="solid" size="sm">Email Automation →</BrandButton>
+          </Link>
+        }
+      />
 
-        {/* Left: Home button */}
-        <Link href="/"
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Home</Link>
+      <div style={{ padding: '24px 32px', maxWidth: 1600, margin: '0 auto' }}>
 
-        {/* Center: Brand */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-3">
-            <DumbbellIcon size={28} />
-            <h1 className="font-bold tracking-widest text-lg" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
+        {/* Timeframe + range note */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}` }}>
+            {['daily','weekly','monthly'].map((t, i) => {
+              const active = timeframe === t
+              return (
+                <button key={t} onClick={() => { setTimeframe(t); setPage(1) }}
+                  style={{
+                    background: active ? BRAND.gold : 'transparent',
+                    color: active ? '#000' : BRAND.textMuted,
+                    border: 'none',
+                    borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                    padding: '6px 16px',
+                    fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.2em', textTransform: 'uppercase',
+                    fontFamily: FONT_BODY,
+                    cursor: 'pointer',
+                  }}>{t}</button>
+              )
+            })}
           </div>
-          <p className="text-xs font-medium tracking-wider" style={{ color: '#fff' }}>
-            OUTREACH PIPELINE
-          </p>
+          <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
+            Contacts Added {timeframe === 'daily' ? 'Today' : timeframe === 'weekly' ? 'This Week' : 'This Month'}
+          </Eyebrow>
         </div>
 
-        {/* Right: Email Automation button */}
-        <Link href="/email-automation"
-          style={{
-            background: '#B8935A', color: '#000',
-            padding: '8px 16px', borderRadius: 8,
-            fontSize: 13, fontWeight: 600, textDecoration: 'none',
-            display: 'flex', alignItems: 'center', gap: 8,
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = '#a8824a'}
-          onMouseLeave={e => e.currentTarget.style.background = '#B8935A'}>
-          <span style={{ fontSize: 15 }}>📧</span>
-          <span>Email Automation</span>
-        </Link>
-      </div>
+        {/* Stats ribbon */}
+        <div style={{
+          position: 'relative',
+          background: BRAND.bgCard,
+          border: `1px solid ${BRAND.border}`,
+          marginBottom: 24,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 1,
+        }}>
+          <CornerBracket position="tl" size={14} />
+          <CornerBracket position="tr" size={14} />
+          <CornerBracket position="bl" size={14} />
+          <CornerBracket position="br" size={14} />
 
-      <div className="px-8 py-6 max-w-screen-xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-2">
-            {['daily','weekly','monthly'].map(t => (
-              <button key={t} onClick={() => { setTimeframe(t); setPage(1) }}
-                className="text-xs px-3 py-1.5 rounded"
-                style={{
-                  background: timeframe === t ? '#B8935A' : '#1a1a1a',
-                  color: timeframe === t ? '#000' : '#888',
-                  border: '1px solid', borderColor: timeframe === t ? '#B8935A' : '#333',
-                }}>{t}</button>
-            ))}
-          </div>
-          <p className="text-xs" style={{ color: '#444' }}>
-            Showing contacts added {timeframe === 'daily' ? 'today' : timeframe === 'weekly' ? 'this week' : 'this month'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-4 gap-4 mb-6">
           {[
-            { label: 'Total Leads', value: statTotal, color: '#B8935A' },
-            { label: 'Called', value: statCalled, color: '#378ADD' },
-            { label: 'Answered', value: statAnswered, color: '#9B59B6' },
-            { label: 'Booked', value: statBooked, color: '#2ECC71' },
-          ].map(stat => (
-            <div key={stat.label} className="p-4 rounded-lg" style={{ background: '#111', border: '1px solid #222' }}>
-              <p className="text-xs tracking-wider mb-2" style={{ color: '#555' }}>{stat.label.toUpperCase()}</p>
-              <p className="text-3xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
+            { label: 'Total Leads', value: statTotal,    color: BRAND.gold },
+            { label: 'Called',      value: statCalled,   color: BRAND.statusNew },
+            { label: 'Answered',    value: statAnswered, color: BRAND.statusLinkSent },
+            { label: 'Booked',      value: statBooked,   color: BRAND.statusBooked },
+          ].map((stat, idx) => (
+            <div key={stat.label} style={{
+              background: BRAND.bgRaised,
+              padding: '18px 22px',
+              position: 'relative',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+                background: `linear-gradient(90deg, transparent, ${stat.color}aa, transparent)`,
+                opacity: 0.5,
+              }} />
+              <p style={{
+                fontFamily: FONT_DISPLAY,
+                fontSize: 32, fontWeight: 400,
+                color: stat.color, lineHeight: 1,
+                letterSpacing: '0.02em',
+                fontVariantNumeric: 'tabular-nums',
+                margin: 0,
+              }}>{stat.value}</p>
+              <Eyebrow color={BRAND.textMuted} style={{ marginTop: 8, letterSpacing: '0.2em', fontSize: 9 }}>
+                {stat.label}
+              </Eyebrow>
             </div>
           ))}
         </div>
 
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
+        {/* Search / Sort / Clear */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search name, email, phone..."
-            className="text-sm px-3 py-2 rounded-lg flex-1 min-w-48 focus:outline-none"
-            style={{ background: '#111', color: '#e0e0e0', border: '1px solid #333' }} />
+            placeholder="SEARCH NAME, EMAIL, PHONE…"
+            style={{
+              flex: 1, minWidth: 240,
+              background: BRAND.bgCard, color: BRAND.textPrimary,
+              border: `1px solid ${BRAND.border}`,
+              padding: '10px 14px',
+              fontSize: 11, letterSpacing: '0.15em',
+              fontFamily: FONT_BODY, outline: 'none',
+            }}
+            onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+            onBlur={e => { e.target.style.borderColor = BRAND.border }} />
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            className="text-xs px-3 py-2 rounded-lg"
-            style={{ background: '#111', color: '#888', border: '1px solid #333' }}>
+            style={{
+              background: BRAND.bgCard, color: BRAND.textSecondary,
+              border: `1px solid ${BRAND.border}`,
+              padding: '10px 14px',
+              fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase',
+              fontFamily: FONT_BODY, outline: 'none',
+              cursor: 'pointer',
+            }}>
             <option value="created">Sort: Newest</option>
             <option value="name">Sort: Name</option>
             <option value="country">Sort: Country</option>
@@ -754,49 +826,63 @@ export default function Calls() {
           </select>
           {activeFilterCount > 0 && (
             <button onClick={clearAllFilters}
-              className="text-xs px-3 py-2 rounded-lg flex items-center gap-1.5"
-              style={{ background: '#B8935A22', color: '#B8935A', border: '1px solid #B8935A44', cursor: 'pointer' }}>
-              Clear filters ({activeFilterCount}) ✕
+              style={{
+                background: 'rgba(176, 131, 74, 0.13)',
+                color: BRAND.gold,
+                border: `1px solid ${BRAND.borderGoldStrong}`,
+                padding: '10px 14px',
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                fontFamily: FONT_BODY,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+              Clear Filters ({activeFilterCount}) ✕
             </button>
           )}
         </div>
 
         {loading ? (
-          <p className="text-sm" style={{ color: '#555' }}>Loading contacts...</p>
+          <Eyebrow color={BRAND.textDim}>Loading contacts...</Eyebrow>
         ) : (
           <>
-            <div className="rounded-lg overflow-auto" style={{ border: '1px solid #222' }}>
-              <table className="text-sm" style={{ minWidth: '1740px', width: '100%' }}>
+            {/* Table */}
+            <div style={{ overflow: 'auto', border: `1px solid ${BRAND.border}` }}>
+              <table style={{ minWidth: 1860, width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#111', borderBottom: '1px solid #222' }}>
+                  <tr style={{ background: BRAND.bgCard, borderBottom: `1px solid ${BRAND.border}` }}>
                     {TABLE_COLS.map((h, idx) => {
                       const isFiltered = h.filterKey && filters[h.filterKey]?.length > 0
                       const isFilterable = !!h.filterKey
                       const isOpen = openFilter === h.filterKey
                       return (
                         <th key={h.label}
-                          className="text-left px-4 py-3 text-xs font-semibold tracking-wider"
                           style={{
-                            color: isFiltered ? '#B8935A' : '#555',
+                            textAlign: 'left',
+                            padding: '12px 14px',
+                            fontSize: 9, fontWeight: 700,
+                            letterSpacing: '0.2em', textTransform: 'uppercase',
+                            color: isFiltered ? BRAND.gold : BRAND.textMuted,
+                            fontFamily: FONT_BODY,
                             width: h.w, minWidth: h.w,
                             position: idx === 0 ? 'sticky' : 'relative',
                             ...(idx === 0 ? {
                               left: 0, zIndex: isOpen ? 100 : 2,
-                              background: '#111', borderRight: '1px solid #222',
+                              background: BRAND.bgCard,
+                              borderRight: `1px solid ${BRAND.border}`,
                             } : {})
                           }}>
                           {isFilterable ? (
                             <div
                               onClick={e => { e.stopPropagation(); setOpenFilter(isOpen ? null : h.filterKey) }}
-                              className="flex items-center gap-1.5 select-none"
-                              style={{ cursor: 'pointer', color: 'inherit' }}>
-                              <span>{h.label.toUpperCase()}</span>
-                              <span style={{ fontSize: 9, opacity: isFiltered ? 1 : 0.5 }}>▼</span>
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+                              <span>{h.label}</span>
+                              <span style={{ fontSize: 8, opacity: isFiltered ? 1 : 0.5 }}>▼</span>
                               {isFiltered && (
                                 <span style={{
-                                  background: '#B8935A', color: '#000',
-                                  fontSize: 9, fontWeight: 700, padding: '1px 5px',
-                                  borderRadius: 8, marginLeft: 2,
+                                  background: BRAND.gold, color: '#000',
+                                  fontSize: 9, fontWeight: 700, padding: '1px 6px',
+                                  marginLeft: 2,
                                 }}>{filters[h.filterKey].length}</span>
                               )}
                               <ColumnFilter
@@ -805,12 +891,12 @@ export default function Calls() {
                                 options={filterOptions[h.filterKey] || []}
                                 selected={filters[h.filterKey] || []}
                                 onToggle={v => toggleFilterValue(h.filterKey, v)}
-                                formatLabel={h.filterKey === 'callWindow' ? (v => callWindowLabels[v]) : null}
+                                formatLabel={h.filterKey === 'callWindow' ? formatCallWindowLabel : null}
                                 searchable={h.filterKey === 'country'}
                               />
                             </div>
                           ) : (
-                            h.label.toUpperCase()
+                            h.label
                           )}
                         </th>
                       )
@@ -820,8 +906,14 @@ export default function Calls() {
                 <tbody>
                   {paginated.length === 0 && (
                     <tr>
-                      <td colSpan={TABLE_COLS.length} className="px-4 py-8 text-center text-sm" style={{ color: '#444' }}>
-                        No contacts found for this timeframe
+                      <td colSpan={TABLE_COLS.length}
+                        style={{
+                          padding: 32, textAlign: 'center',
+                          fontSize: 11, color: BRAND.textDim,
+                          fontFamily: FONT_BODY,
+                          letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
+                        }}>
+                        No Contacts Found For This Timeframe
                       </td>
                     </tr>
                   )}
@@ -830,31 +922,37 @@ export default function Calls() {
                     const tag = log?.tag || 'uncalled'
                     const cf = contact.customFields || []
                     const isSelected = selectedRow === contact.id
-                    const rowBg = isSelected ? '#1e1a12' : i % 2 === 0 ? '#0d0d0d' : '#111'
+                    const rowBg = isSelected ? 'rgba(176, 131, 74, 0.07)' : i % 2 === 0 ? BRAND.bgCard : BRAND.bgRaised
                     const urgent = needsCall(tag, log?.last_contacted)
                     return (
                       <tr key={contact.id}
                         id={`contact-row-${contact.id}`}
                         onClick={() => setSelectedRow(prev => prev === contact.id ? null : contact.id)}
                         style={{
-                          background: rowBg, borderBottom: '1px solid #1a1a1a',
+                          background: rowBg,
+                          borderBottom: `1px solid ${BRAND.border}`,
                           cursor: 'pointer',
-                          outline: isSelected ? '1px solid #B8935A55' : 'none',
-                          outlineOffset: '-1px',
+                          outline: isSelected ? `1px solid ${BRAND.borderGoldStrong}` : 'none',
+                          outlineOffset: -1,
                         }}>
-                        <td className="px-4 py-3 font-medium"
-                          style={{
-                            position: 'sticky', left: 0, zIndex: 1,
-                            background: rowBg, borderRight: '1px solid #222',
-                          }}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                              style={{
-                                background: urgent ? '#B8935A33' : '#B8935A22',
-                                color: '#B8935A',
-                                border: `1px solid ${urgent ? '#B8935A99' : '#B8935A44'}`,
-                                boxShadow: urgent ? '0 0 8px #B8935A55' : 'none',
-                              }}>
+                        <td style={{
+                          padding: '10px 14px',
+                          fontWeight: 500,
+                          position: 'sticky', left: 0, zIndex: 1,
+                          background: rowBg,
+                          borderRight: `1px solid ${BRAND.border}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{
+                              width: 26, height: 26, borderRadius: 999,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, fontWeight: 700, flexShrink: 0,
+                              background: urgent ? 'rgba(176, 131, 74, 0.18)' : 'transparent',
+                              color: BRAND.gold,
+                              border: `1px solid ${urgent ? BRAND.gold : BRAND.borderGold}`,
+                              boxShadow: urgent ? `0 0 10px ${BRAND.goldGlow}` : 'none',
+                              fontFamily: FONT_BODY,
+                            }}>
                               {(contact.contactName || '?')[0].toUpperCase()}
                             </div>
                             <Link
@@ -864,87 +962,137 @@ export default function Calls() {
                                 saveListState(contact.id)
                               }}
                               style={{
-                                color: urgent ? '#B8935A' : '#aaa',
-                                textShadow: urgent ? '0 0 12px #B8935A88' : 'none',
+                                color: urgent ? BRAND.gold : BRAND.textPrimary,
+                                textShadow: urgent ? `0 0 12px ${BRAND.goldGlow}` : 'none',
                                 fontWeight: urgent ? 600 : 400,
                                 whiteSpace: 'nowrap',
                                 transition: 'all 0.2s',
                                 textDecoration: 'none',
                                 borderBottom: '1px dotted transparent',
+                                fontFamily: FONT_BODY,
+                                fontSize: 12,
+                                letterSpacing: '0.01em',
                               }}
                               onMouseEnter={e => {
-                                e.currentTarget.style.borderBottomColor = urgent ? '#B8935A' : '#888'
-                                if (!urgent) e.currentTarget.style.color = '#e0e0e0'
+                                e.currentTarget.style.borderBottomColor = urgent ? BRAND.gold : BRAND.textMuted
                               }}
                               onMouseLeave={e => {
                                 e.currentTarget.style.borderBottomColor = 'transparent'
-                                if (!urgent) e.currentTarget.style.color = '#aaa'
                               }}>
                               {contact.contactName || '—'}
                             </Link>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs" style={{ color: '#888' }}>{formatCreated(contact.dateAdded)}</td>
-                        <td className="px-4 py-3" style={{ color: '#aaa' }}>
-                          <div className="flex items-center gap-1.5">
-                            <span style={{ whiteSpace: 'nowrap' }}>{contact.phone || '—'}</span>
+                        <td style={{ padding: '10px 14px', fontSize: 10, color: BRAND.textMuted, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
+                          {formatCreated(contact.dateAdded)}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{contact.phone || '—'}</span>
                             {contact.phone && (
-                              <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.phone) }}
-                                title="Copy phone"
-                                style={{
-                                  flexShrink: 0, color: '#555', background: 'transparent',
-                                  border: '1px solid #333', borderRadius: '4px',
-                                  padding: '1px 5px', fontSize: '11px', lineHeight: 1.4, cursor: 'pointer',
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.color = '#B8935A'; e.currentTarget.style.borderColor = '#B8935A66' }}
-                                onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#333' }}>
-                                ⎘
-                              </button>
+                              <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.phone, `phone-${contact.id}`) }}
+                                  title="Copy phone"
+                                  style={{
+                                    flexShrink: 0, color: BRAND.textDim,
+                                    background: 'transparent',
+                                    border: `1px solid ${BRAND.border}`,
+                                    padding: '1px 5px', fontSize: 10, lineHeight: 1.4, cursor: 'pointer',
+                                    fontFamily: FONT_BODY,
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold; e.currentTarget.style.borderColor = BRAND.borderGoldStrong }}
+                                  onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
+                                  ⎘
+                                </button>
+                                {copiedKey === `phone-${contact.id}` && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    bottom: 'calc(100% + 4px)', left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    background: BRAND.gold, color: '#000',
+                                    padding: '3px 8px', fontSize: 9, fontWeight: 700,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    fontFamily: FONT_BODY, whiteSpace: 'nowrap',
+                                    pointerEvents: 'none', zIndex: 20,
+                                    boxShadow: `0 0 12px ${BRAND.goldGlow}`,
+                                  }}>Copied</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3" style={{ color: '#aaa' }}>
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate block" style={{ maxWidth: '160px' }}>{contact.email || '—'}</span>
+                        <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160, fontSize: 11, display: 'block' }}>{contact.email || '—'}</span>
                             {contact.email && (
-                              <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.email) }}
-                                title="Copy email"
-                                style={{
-                                  flexShrink: 0, color: '#555', background: 'transparent',
-                                  border: '1px solid #333', borderRadius: '4px',
-                                  padding: '1px 5px', fontSize: '11px', lineHeight: 1.4, cursor: 'pointer',
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.color = '#B8935A'; e.currentTarget.style.borderColor = '#B8935A66' }}
-                                onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#333' }}>
-                                ⎘
-                              </button>
+                              <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.email, `email-${contact.id}`) }}
+                                  title="Copy email"
+                                  style={{
+                                    flexShrink: 0, color: BRAND.textDim,
+                                    background: 'transparent',
+                                    border: `1px solid ${BRAND.border}`,
+                                    padding: '1px 5px', fontSize: 10, lineHeight: 1.4, cursor: 'pointer',
+                                    fontFamily: FONT_BODY,
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold; e.currentTarget.style.borderColor = BRAND.borderGoldStrong }}
+                                  onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
+                                  ⎘
+                                </button>
+                                {copiedKey === `email-${contact.id}` && (
+                                  <span style={{
+                                    position: 'absolute',
+                                    bottom: 'calc(100% + 4px)', left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    background: BRAND.gold, color: '#000',
+                                    padding: '3px 8px', fontSize: 9, fontWeight: 700,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    fontFamily: FONT_BODY, whiteSpace: 'nowrap',
+                                    pointerEvents: 'none', zIndex: 20,
+                                    boxShadow: `0 0 12px ${BRAND.goldGlow}`,
+                                  }}>Copied</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3" style={{ color: '#aaa' }}>
-                          <span style={{ whiteSpace: 'normal', lineHeight: '1.4' }}>{getField(cf, FIELD_IDS.struggle)}</span>
+                        <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
+                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{getField(cf, FIELD_IDS.struggle)}</span>
                         </td>
-                        <td className="px-4 py-3 text-center" style={{ color: '#aaa' }}>{getField(cf, FIELD_IDS.bothered)}</td>
-                        <td className="px-4 py-3" style={{ color: '#aaa' }}>
-                          <span style={{ whiteSpace: 'normal', lineHeight: '1.4' }}>{getField(cf, FIELD_IDS.invest)}</span>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600 }}>
+                          {getField(cf, FIELD_IDS.bothered)}
                         </td>
-                        <td className="px-4 py-3 text-center" style={{ color: '#aaa' }}>{getField(cf, FIELD_IDS.age)}</td>
-                        <td className="px-4 py-3" style={{ color: '#aaa' }}>{getCountryName(contact.country)}</td>
+                        <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
+                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{getField(cf, FIELD_IDS.invest)}</span>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
+                          {getField(cf, FIELD_IDS.age)}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
+                          {getCountryName(contact.country)}
+                        </td>
                         <LocalTimeCell phone={contact.phone} />
-                        <td className="px-4 py-3 text-xs" style={{ color: '#666' }}>{timeAgo(log?.last_contacted)}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 10, color: BRAND.textDim, fontFamily: FONT_BODY, letterSpacing: '0.05em' }}>
+                          {timeAgo(log?.last_contacted)}
+                        </td>
                         <NotesCell contactId={contact.id} initialNote={log?.notes} onSave={saveNote} />
-                        <td className="px-4 py-3">
+                        <td style={{ padding: '10px 14px' }}>
                           <select value={tag}
                             onClick={e => e.stopPropagation()}
                             onChange={e => { e.stopPropagation(); updateTag(contact.id, e.target.value) }}
-                            className="text-xs px-2 py-1 rounded w-full"
                             style={{
-                              background: `${tagColors[tag]}22`,
-                              color: tagColors[tag],
-                              border: `1px solid ${tagColors[tag]}44`,
+                              fontSize: 10, fontWeight: 700,
+                              letterSpacing: '0.15em', textTransform: 'uppercase',
+                              padding: '5px 8px', width: '100%',
+                              background: `${TAG_COLORS[tag]}1f`,
+                              color: TAG_COLORS[tag],
+                              border: `1px solid ${TAG_COLORS[tag]}55`,
+                              fontFamily: FONT_BODY,
+                              outline: 'none',
+                              cursor: 'pointer',
                             }}>
                             {tags.map(t => (
-                              <option key={t} value={t} style={{ background: '#1a1a1a', color: tagColors[t] }}>{t}</option>
+                              <option key={t} value={t} style={{ background: BRAND.bgRaised, color: TAG_COLORS[t] }}>{t}</option>
                             ))}
                           </select>
                         </td>
@@ -955,49 +1103,88 @@ export default function Calls() {
               </table>
             </div>
 
-            <div className="flex items-center justify-between mt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: '#555' }}>Rows per page:</span>
-                {[10, 20, 50].map(n => (
-                  <button key={n} onClick={() => { setPerPage(n); setPage(1) }}
-                    className="text-xs px-2 py-1 rounded"
-                    style={{
-                      background: perPage === n ? '#B8935A' : '#1a1a1a',
-                      color: perPage === n ? '#000' : '#888',
-                      border: '1px solid', borderColor: perPage === n ? '#B8935A' : '#333',
-                    }}>{n}</button>
-                ))}
+            {/* Pagination */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>Rows Per Page</Eyebrow>
+                <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}` }}>
+                  {[20, 50].map((n, i) => {
+                    const active = perPage === n
+                    return (
+                      <button key={n} onClick={() => { setPerPage(n); setPage(1) }}
+                        style={{
+                          background: active ? BRAND.gold : 'transparent',
+                          color: active ? '#000' : BRAND.textMuted,
+                          border: 'none',
+                          borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                          padding: '5px 12px',
+                          fontSize: 10, fontWeight: 700,
+                          letterSpacing: '0.1em',
+                          fontFamily: FONT_BODY,
+                          cursor: 'pointer',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>{n}</button>
+                    )
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: '#555' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{
+                  fontSize: 10, color: BRAND.textDim,
+                  letterSpacing: '0.15em', fontWeight: 600,
+                  fontFamily: FONT_BODY, textTransform: 'uppercase',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
                   {filtered.length === 0 ? '0' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, filtered.length)}`} of {filtered.length}
                 </span>
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="text-xs px-3 py-1 rounded"
-                  style={{ background: '#1a1a1a', color: page === 1 ? '#333' : '#888', border: '1px solid #333' }}>←</button>
+                  style={{
+                    background: BRAND.bgRaised,
+                    color: page === 1 ? BRAND.textDim : BRAND.textSecondary,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '5px 14px',
+                    fontSize: 12,
+                    cursor: page === 1 ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT_BODY,
+                  }}>←</button>
                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || totalPages === 0}
-                  className="text-xs px-3 py-1 rounded"
-                  style={{ background: '#1a1a1a', color: page === totalPages ? '#333' : '#888', border: '1px solid #333' }}>→</button>
+                  style={{
+                    background: BRAND.bgRaised,
+                    color: (page === totalPages || totalPages === 0) ? BRAND.textDim : BRAND.textSecondary,
+                    border: `1px solid ${BRAND.border}`,
+                    padding: '5px 14px',
+                    fontSize: 12,
+                    cursor: (page === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer',
+                    fontFamily: FONT_BODY,
+                  }}>→</button>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 mt-3">
-              <span className="text-xs" style={{ color: '#444' }}>Call window:</span>
+            {/* Legend */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 16 }}>
+              <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.25em' }}>Call Window</Eyebrow>
               {[
-                { color: '#2ECC71', label: 'Good to call (6–8pm · wknd 11am–8pm)' },
-                { color: '#F0A500', label: 'Within 30 min' },
-                { color: '#E74C3C', label: 'Outside window' },
+                { color: BRAND.statusBooked,       label: 'Good To Call (6–8pm · Wknd 11am–8pm)' },
+                { color: BRAND.statusQualifying,   label: 'Within 30 Min' },
+                { color: BRAND.statusDisqualified, label: 'Outside Window' },
               ].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ background: color, boxShadow: `0 0 5px ${color}88` }} />
-                  <span className="text-xs" style={{ color: '#555' }}>{label}</span>
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: 999, flexShrink: 0,
+                    background: color,
+                    boxShadow: `0 0 6px ${color}99`,
+                  }} />
+                  <span style={{
+                    fontSize: 10, color: BRAND.textMuted,
+                    fontFamily: FONT_BODY,
+                    letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+                  }}>{label}</span>
                 </div>
               ))}
             </div>
           </>
         )}
       </div>
-    </div>
+    </PageBackground>
   )
 }

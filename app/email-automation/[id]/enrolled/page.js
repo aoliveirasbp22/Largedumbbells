@@ -3,17 +3,22 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
+  CornerBracket,
+} from '@/lib/brand'
 
 const STEP_LABELS = {
-  email: 'Send email',
+  email: 'Send Email',
   sms:   'Send SMS',
   wait:  'Wait',
 }
 
 const STEP_COLORS = {
-  email: '#B8935A',
-  sms:   '#378ADD',
-  wait:  '#F0A500',
+  email: BRAND.gold,
+  sms:   BRAND.statusNew,
+  wait:  BRAND.statusQualifying,
 }
 
 function stepSummary(step) {
@@ -54,20 +59,35 @@ export default function EnrolledPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', padding: 32, background: '#0a0a0a' }}>
-        <p style={{ color: '#555', fontSize: 14 }}>Loading…</p>
-      </div>
+      <PageBackground style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <Eyebrow color={BRAND.textDim}>Loading</Eyebrow>
+          <div style={{ width: 32, height: 1, background: BRAND.gold }} />
+        </div>
+      </PageBackground>
     )
   }
 
   if (!campaign) {
     return (
-      <div style={{ minHeight: '100vh', padding: 32, background: '#0a0a0a' }}>
-        <p style={{ color: '#E74C3C', fontSize: 14, marginBottom: 8 }}>Campaign not found.</p>
-        <Link href="/email-automation" style={{ color: '#B8935A', fontSize: 14 }}>
-          ← Back to campaigns
-        </Link>
-      </div>
+      <PageBackground style={{ minHeight: '100vh' }}>
+        <PageHeader
+          pageLabel="Enrollment Details"
+          leftSlot={
+            <Link href="/email-automation" style={{ textDecoration: 'none' }}>
+              <BrandButton variant="ghost" size="sm">← Campaigns</BrandButton>
+            </Link>
+          }
+        />
+        <div style={{ padding: 80, textAlign: 'center' }}>
+          <Eyebrow color={BRAND.statusDisqualified} style={{ fontSize: 11, letterSpacing: '0.3em', marginBottom: 16 }}>
+            Campaign Not Found
+          </Eyebrow>
+          <Link href="/email-automation" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="primary" size="md">← Back To Campaigns</BrandButton>
+          </Link>
+        </div>
+      </PageBackground>
     )
   }
 
@@ -79,113 +99,178 @@ export default function EnrolledPage() {
   })
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0a', fontFamily: 'sans-serif' }}>
+    <PageBackground style={{ minHeight: '100vh' }}>
 
-      <div style={{
-        borderBottom: '1px solid #222', padding: '16px 32px',
-        background: '#111',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
+      <PageHeader
+        pageLabel="Enrollment Details"
+        leftSlot={
+          <Link href={`/email-automation/${id}`} style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← Back To Campaign</BrandButton>
+          </Link>
+        }
+        rightSlot={<div style={{ minWidth: 150 }} />}
+      />
 
-        {/* Left: Back button */}
-        <Link href={`/email-automation/${id}`}
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Back to campaign</Link>
+      <div style={{ padding: '32px 24px', maxWidth: 1000, margin: '0 auto' }}>
 
-        {/* Center: Brand */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
-            LARGE DUMBBELLS
-          </h1>
-          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
-            ENROLLMENT DETAILS
-          </p>
-        </div>
-
-        {/* Right: spacer */}
-        <div style={{ minWidth: 150 }} />
-      </div>
-
-      <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
-
-        <div style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#e0e0e0' }}>
-            Enrolled contacts
-          </h2>
-          <p style={{ fontSize: 14, marginTop: 4, color: '#555' }}>
-            {enrollments.length} contact{enrollments.length === 1 ? '' : 's'} currently in this campaign.
+        {/* Hero title */}
+        <div style={{ marginBottom: 28 }}>
+          <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
+            {campaign.name || 'Untitled Campaign'}
+          </Eyebrow>
+          <DisplayHeading size={36} style={{ marginBottom: 12 }}>
+            Enrolled Contacts
+          </DisplayHeading>
+          <GoldRule width={40} />
+          <p style={{
+            fontSize: 11, marginTop: 14, color: BRAND.textMuted,
+            fontFamily: FONT_BODY,
+            letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
+          }}>
+            {enrollments.length} Contact{enrollments.length === 1 ? '' : 's'} Currently In This Campaign
           </p>
         </div>
 
         {steps.length === 0 ? (
           <div style={{
-            background: '#111', border: '1px dashed #333',
-            borderRadius: 12, padding: 48, textAlign: 'center',
+            position: 'relative',
+            background: BRAND.bgCard,
+            border: `1px dashed ${BRAND.border}`,
+            padding: '50px 32px', textAlign: 'center',
           }}>
-            <p style={{ fontSize: 14, color: '#888', marginBottom: 4 }}>This campaign has no steps yet</p>
-            <p style={{ fontSize: 12, color: '#555' }}>Add steps in the campaign builder first.</p>
+            <CornerBracket position="tl" />
+            <CornerBracket position="tr" />
+            <CornerBracket position="bl" />
+            <CornerBracket position="br" />
+            <Eyebrow color={BRAND.textMuted} style={{ fontSize: 11, letterSpacing: '0.3em', marginBottom: 12 }}>
+              No Steps Yet
+            </Eyebrow>
+            <p style={{
+              fontSize: 12, color: BRAND.textDim,
+              fontFamily: FONT_BODY, fontStyle: 'italic',
+            }}>Add steps in the campaign builder first.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {steps.map((step, i) => {
               const contactsHere = byStep[i] || []
               const color = STEP_COLORS[step.type]
+              const hasContacts = contactsHere.length > 0
               return (
                 <div key={step.id}
                   style={{
-                    background: '#111', border: '1px solid #1a1a1a',
-                    borderRadius: 12, overflow: 'hidden',
+                    position: 'relative',
+                    background: BRAND.bgCard,
+                    border: `1px solid ${BRAND.border}`,
+                    overflow: 'hidden',
                   }}>
+                  <CornerBracket position="tl" size={12} />
+                  <CornerBracket position="tr" size={12} />
+                  <CornerBracket position="bl" size={12} />
+                  <CornerBracket position="br" size={12} />
+
+                  {/* Step header */}
                   <div style={{
-                    padding: 16, borderBottom: '1px solid #1a1a1a',
+                    padding: 18,
+                    borderBottom: `1px solid ${BRAND.border}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, flexWrap: 'wrap',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
                       <div style={{
-                        width: 24, height: 24, borderRadius: 999,
-                        background: `${color}22`, color: color,
-                        border: `1px solid ${color}44`,
+                        width: 30, height: 30, borderRadius: 999, flexShrink: 0,
+                        background: 'transparent',
+                        color, border: `1px solid ${color}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 11, fontWeight: 700,
+                        fontFamily: FONT_DISPLAY,
+                        fontSize: 14, fontWeight: 400,
+                        letterSpacing: '0.02em',
                       }}>{i + 1}</div>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 500, color: '#e0e0e0' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{
+                          fontSize: 13, fontWeight: 600, color: BRAND.textPrimary,
+                          fontFamily: FONT_BODY, letterSpacing: '0.02em',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
                           {step.name || STEP_LABELS[step.type]}
                         </p>
-                        <p style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-                          {STEP_LABELS[step.type]} · {stepSummary(step)}
-                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                          <Eyebrow color={color} style={{ fontSize: 9, letterSpacing: '0.25em' }}>
+                            {STEP_LABELS[step.type]}
+                          </Eyebrow>
+                          <span style={{ color: BRAND.textDim, fontSize: 11 }}>·</span>
+                          <span style={{
+                            fontSize: 11, color: BRAND.textMuted,
+                            fontFamily: FONT_BODY,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            maxWidth: 400,
+                          }}>
+                            {stepSummary(step)}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
                     <span style={{
-                      fontSize: 11, padding: '4px 10px', borderRadius: 999,
-                      background: contactsHere.length > 0 ? `${color}22` : '#1a1a1a',
-                      color: contactsHere.length > 0 ? color : '#555',
-                      fontWeight: 500,
+                      fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.2em', textTransform: 'uppercase',
+                      padding: '5px 12px',
+                      background: hasContacts ? `${color}1f` : 'transparent',
+                      color: hasContacts ? color : BRAND.textDim,
+                      border: `1px solid ${hasContacts ? `${color}55` : BRAND.border}`,
+                      fontFamily: FONT_BODY,
+                      flexShrink: 0,
                     }}>
-                      {contactsHere.length} contact{contactsHere.length === 1 ? '' : 's'}
+                      {contactsHere.length} Contact{contactsHere.length === 1 ? '' : 's'}
                     </span>
                   </div>
 
-                  <div style={{ padding: 16 }}>
-                    {contactsHere.length === 0 ? (
-                      <p style={{ fontSize: 12, color: '#444', fontStyle: 'italic' }}>
-                        No one in this step
+                  {/* Contacts */}
+                  <div style={{ padding: 18 }}>
+                    {!hasContacts ? (
+                      <p style={{
+                        fontSize: 11, color: BRAND.textDim, fontStyle: 'italic',
+                        fontFamily: FONT_BODY,
+                        letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+                      }}>
+                        No One In This Step
                       </p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {contactsHere.map(c => (
-                          <div key={c.id}
+                          <Link key={c.id}
+                            href={`/calls/${c.contact_id}`}
                             style={{
-                              padding: '8px 12px', background: '#0d0d0d',
-                              border: '1px solid #1a1a1a', borderRadius: 6,
-                              fontSize: 13, color: '#ccc',
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '9px 14px',
+                              background: BRAND.bgInput,
+                              border: `1px solid ${BRAND.border}`,
+                              fontSize: 12,
+                              color: BRAND.textSecondary,
+                              fontFamily: FONT_BODY,
+                              textDecoration: 'none',
+                              letterSpacing: '0.02em',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.borderColor = BRAND.borderGoldStrong
+                              e.currentTarget.style.color = BRAND.textPrimary
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.borderColor = BRAND.border
+                              e.currentTarget.style.color = BRAND.textSecondary
                             }}>
-                            Contact ID: {c.contact_id}
-                          </div>
+                            <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
+                              ID
+                            </Eyebrow>
+                            <code style={{
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: BRAND.textPrimary,
+                              letterSpacing: '0.02em',
+                            }}>{c.contact_id}</code>
+                            <span style={{ marginLeft: 'auto', color: BRAND.textDim, fontSize: 12 }}>→</span>
+                          </Link>
                         ))}
                       </div>
                     )}
@@ -196,6 +281,6 @@ export default function EnrolledPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageBackground>
   )
 }

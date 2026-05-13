@@ -4,20 +4,15 @@ import { supabase } from '@/lib/supabase'
 import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  TAG_COLORS,
+  Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
+  CornerBracket,
+} from '@/lib/brand'
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
 
-const TAG_COLORS = {
-  uncalled: '#555',
-  'called once': '#378ADD',
-  'called twice': '#F0A500',
-  'called three times': '#E74C3C',
-  'not interested': '#888',
-  'call back': '#9B59B6',
-  booked: '#2ECC71',
-}
-
-// Same field IDs as the call list — these are confirmed working
 const FIELD_IDS = {
   struggle: 'WtsEP55kDKmuYvjR3cRM',
   bothered: 'b9izCUDE2DcOqViZ6Da4',
@@ -33,33 +28,65 @@ function CopyButton({ value }) {
   const [copied, setCopied] = useState(false)
   if (!value) return null
   return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(value)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
-      }}
-      title="Copy"
-      style={{
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        color: copied ? '#2ECC71' : '#666', fontSize: 12, padding: '0 6px',
-      }}>
-      {copied ? '✓' : '⎘'}
-    </button>
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(value)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1400)
+        }}
+        title="Copy"
+        style={{
+          background: 'transparent',
+          border: `1px solid ${BRAND.border}`,
+          color: BRAND.textDim,
+          padding: '2px 7px',
+          fontSize: 11, lineHeight: 1.4,
+          cursor: 'pointer',
+          fontFamily: FONT_BODY,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold; e.currentTarget.style.borderColor = BRAND.borderGoldStrong }}
+        onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
+        ⎘
+      </button>
+      {copied && (
+        <span style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 4px)', left: '50%',
+          transform: 'translateX(-50%)',
+          background: BRAND.gold, color: '#000',
+          padding: '3px 8px', fontSize: 9, fontWeight: 700,
+          letterSpacing: '0.15em', textTransform: 'uppercase',
+          fontFamily: FONT_BODY, whiteSpace: 'nowrap',
+          pointerEvents: 'none', zIndex: 20,
+          boxShadow: `0 0 12px ${BRAND.goldGlow}`,
+        }}>Copied</span>
+      )}
+    </div>
   )
 }
 
 function FieldRow({ label, value, copyable }) {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', gap: 4,
-      padding: '12px 16px', borderBottom: '1px solid #1a1a1a',
+      display: 'flex', flexDirection: 'column', gap: 6,
+      padding: '14px 18px',
+      borderBottom: `1px solid ${BRAND.border}`,
     }}>
-      <p style={{ fontSize: 10, fontWeight: 600, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em' }}>
         {label}
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <p style={{ fontSize: 14, color: value ? '#e0e0e0' : '#444', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+      </Eyebrow>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+        <p style={{
+          fontSize: 13,
+          color: value ? BRAND.textPrimary : BRAND.textDim,
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.5,
+          fontFamily: FONT_BODY,
+          letterSpacing: '0.01em',
+          flex: 1,
+        }}>
           {value || '—'}
         </p>
         {copyable && value && <CopyButton value={value} />}
@@ -68,9 +95,39 @@ function FieldRow({ label, value, copyable }) {
   )
 }
 
+function SectionCard({ children, title, style = {} }) {
+  return (
+    <div style={{
+      position: 'relative',
+      background: BRAND.bgCard,
+      border: `1px solid ${BRAND.border}`,
+      overflow: 'hidden',
+      ...style,
+    }}>
+      <CornerBracket position="tl" size={14} />
+      <CornerBracket position="tr" size={14} />
+      <CornerBracket position="bl" size={14} />
+      <CornerBracket position="br" size={14} />
+
+      {title && (
+        <div style={{
+          padding: '16px 18px 14px',
+          borderBottom: `1px solid ${BRAND.border}`,
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <Eyebrow style={{ fontSize: 10, letterSpacing: '0.3em' }}>{title}</Eyebrow>
+          <GoldRule width={28} />
+        </div>
+      )}
+
+      {children}
+    </div>
+  )
+}
+
 export default function ContactProfile() {
   const params = useParams()
-  const contactId = params.contactId
+  const contactId = params.id ?? params.contactId
 
   const [contact, setContact] = useState(null)
   const [callLog, setCallLog] = useState(null)
@@ -147,20 +204,38 @@ export default function ContactProfile() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', padding: 32, background: '#0a0a0a' }}>
-        <p style={{ color: '#555', fontSize: 14 }}>Loading…</p>
-      </div>
+      <PageBackground style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <Eyebrow color={BRAND.textDim}>Loading Contact</Eyebrow>
+          <div style={{ width: 32, height: 1, background: BRAND.gold }} />
+        </div>
+      </PageBackground>
     )
   }
 
   if (!contact) {
     return (
-      <div style={{ minHeight: '100vh', padding: 32, background: '#0a0a0a' }}>
-        <p style={{ color: '#E74C3C', fontSize: 14, marginBottom: 8 }}>Contact not found.</p>
-        <Link href="/calls" style={{ color: '#B8935A', fontSize: 14 }}>
-          ← Back to call list
-        </Link>
-      </div>
+      <PageBackground style={{ minHeight: '100vh' }}>
+        <PageHeader
+          pageLabel="Contact Profile"
+          leftSlot={
+            <Link href="/calls" style={{ textDecoration: 'none' }}>
+              <BrandButton variant="ghost" size="sm">← Outreach Pipeline</BrandButton>
+            </Link>
+          }
+        />
+        <div style={{
+          padding: 80, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 16,
+        }}>
+          <Eyebrow color={BRAND.statusDisqualified} style={{ fontSize: 11, letterSpacing: '0.3em' }}>
+            Contact Not Found
+          </Eyebrow>
+          <Link href="/calls" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="primary" size="md">← Back To List</BrandButton>
+          </Link>
+        </div>
+      </PageBackground>
     )
   }
 
@@ -182,162 +257,196 @@ export default function ContactProfile() {
   const tag = callLog?.tag || 'uncalled'
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0a', fontFamily: 'sans-serif' }}>
+    <PageBackground style={{ minHeight: '100vh' }}>
 
-      {/* Header */}
-      <div style={{
-        borderBottom: '1px solid #222', padding: '16px 32px',
-        background: '#111',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-
-        {/* Left: Back button */}
-        <Link href="/calls"
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Back to Outreach Pipeline</Link>
-
-        {/* Center: Brand */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <h1 style={{ fontWeight: 700, letterSpacing: '0.1em', fontSize: 18, color: '#B8935A' }}>
-            LARGE DUMBBELLS
-          </h1>
-          <p style={{ fontSize: 11, color: '#fff', fontWeight: 500, letterSpacing: '0.08em' }}>
-            CONTACT PROFILE
-          </p>
-        </div>
-
-        {/* Right: save status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200, justifyContent: 'flex-end' }}>
-          {saving && <span style={{ fontSize: 12, color: '#555' }}>Saving…</span>}
-          {!saving && lastSaved && (
-            <span style={{ fontSize: 12, color: '#555' }}>
-              Saved {lastSaved.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
-
-        {/* Profile header */}
-        <div style={{
-          background: '#111', border: '1px solid #1a1a1a',
-          borderRadius: 12, padding: 24, marginBottom: 24,
-          display: 'flex', alignItems: 'center', gap: 20,
-        }}>
+      <PageHeader
+        pageLabel="Contact Profile"
+        leftSlot={
+          <Link href="/calls" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← Outreach Pipeline</BrandButton>
+          </Link>
+        }
+        rightSlot={
           <div style={{
-            width: 72, height: 72, borderRadius: 999,
-            background: '#B8935A22', color: '#B8935A',
-            border: '1px solid #B8935A44',
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 10, fontFamily: FONT_BODY,
+            letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600,
+          }}>
+            {saving && (
+              <>
+                <div style={{
+                  width: 6, height: 6, borderRadius: 999,
+                  background: BRAND.statusQualifying,
+                  boxShadow: `0 0 6px ${BRAND.statusQualifying}99`,
+                }} />
+                <span style={{ color: BRAND.textMuted }}>Saving</span>
+              </>
+            )}
+            {!saving && lastSaved && (
+              <>
+                <div style={{
+                  width: 6, height: 6, borderRadius: 999,
+                  background: BRAND.statusBooked,
+                  boxShadow: `0 0 6px ${BRAND.statusBooked}99`,
+                }} />
+                <span style={{ color: BRAND.textMuted }}>
+                  Saved {lastSaved.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              </>
+            )}
+          </div>
+        }
+      />
+
+      <div style={{ padding: '32px 24px', maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* Profile hero card */}
+        <div style={{
+          position: 'relative',
+          background: BRAND.bgCard,
+          border: `1px solid ${BRAND.border}`,
+          padding: '28px 32px',
+          marginBottom: 24,
+          display: 'flex', alignItems: 'center', gap: 24,
+        }}>
+          <CornerBracket position="tl" />
+          <CornerBracket position="tr" />
+          <CornerBracket position="bl" />
+          <CornerBracket position="br" />
+
+          {/* Avatar */}
+          <div style={{
+            width: 80, height: 80, borderRadius: 999,
+            background: 'transparent',
+            color: BRAND.gold,
+            border: `1px solid ${BRAND.borderGoldStrong}`,
+            boxShadow: `0 0 20px ${BRAND.goldGlow}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24, fontWeight: 700, flexShrink: 0,
+            fontFamily: FONT_DISPLAY,
+            fontSize: 30, fontWeight: 400,
+            letterSpacing: '0.02em',
+            flexShrink: 0,
           }}>
             {initials}
           </div>
+
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: '#e0e0e0' }}>
-                {fullName}
-              </h2>
+            <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 8 }}>
+              Lead Profile
+            </Eyebrow>
+            <DisplayHeading size={36} style={{ marginBottom: 8 }}>
+              {fullName}
+            </DisplayHeading>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12 }}>
               <span style={{
-                background: `${TAG_COLORS[tag]}33`,
-                color:      TAG_COLORS[tag],
-                border:     `1px solid ${TAG_COLORS[tag]}`,
-                padding:    '3px 10px', borderRadius: 999,
-                fontSize:   11, fontWeight: 500,
+                background: `${TAG_COLORS[tag]}1f`,
+                color: TAG_COLORS[tag],
+                border: `1px solid ${TAG_COLORS[tag]}55`,
+                padding: '5px 14px',
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                fontFamily: FONT_BODY,
               }}>{tag}</span>
+              {(country || age) && (
+                <span style={{
+                  fontSize: 11, color: BRAND.textMuted,
+                  fontFamily: FONT_BODY,
+                  letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+                }}>
+                  {[country, age && `${age} Years Old`].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </div>
-            <p style={{ fontSize: 13, color: '#666' }}>
-              {[country, age && `${age} years old`].filter(Boolean).join(' · ') || 'No location/age info'}
-            </p>
           </div>
         </div>
 
         {/* Tag selector */}
-        <div style={{
-          background: '#111', border: '1px solid #1a1a1a',
-          borderRadius: 12, padding: 20, marginBottom: 24,
-        }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12, color: '#B8935A' }}>
-            CALL STATUS
-          </p>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <SectionCard title="Call Status" style={{ marginBottom: 24 }}>
+          <div style={{ padding: '18px 18px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {TAGS.map(t => {
               const isActive = tag === t
               return (
                 <button key={t}
                   onClick={() => updateTag(t)}
                   style={{
-                    background: isActive ? `${TAG_COLORS[t]}33` : '#1a1a1a',
-                    color:      isActive ? TAG_COLORS[t] : '#888',
-                    border:     `1px solid ${isActive ? TAG_COLORS[t] : '#333'}`,
-                    padding:    '4px 10px', borderRadius: 999,
-                    fontSize:   12, cursor: 'pointer',
-                  }}>{t}</button>
+                    background: isActive ? `${TAG_COLORS[t]}1f` : 'transparent',
+                    color: isActive ? TAG_COLORS[t] : BRAND.textMuted,
+                    border: `1px solid ${isActive ? TAG_COLORS[t] : BRAND.border}`,
+                    padding: '7px 14px',
+                    fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.2em', textTransform: 'uppercase',
+                    fontFamily: FONT_BODY,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    if (isActive) return
+                    e.currentTarget.style.borderColor = TAG_COLORS[t]
+                    e.currentTarget.style.color = TAG_COLORS[t]
+                  }}
+                  onMouseLeave={e => {
+                    if (isActive) return
+                    e.currentTarget.style.borderColor = BRAND.border
+                    e.currentTarget.style.color = BRAND.textMuted
+                  }}>
+                  {t}
+                </button>
               )
             })}
           </div>
-        </div>
+        </SectionCard>
 
         {/* Two-column grid: Contact + Survey */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-          <div style={{
-            background: '#111', border: '1px solid #1a1a1a',
-            borderRadius: 12, overflow: 'hidden',
-          }}>
-            <p style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-              padding: '16px 16px 12px', color: '#B8935A',
-              borderBottom: '1px solid #1a1a1a',
-            }}>CONTACT INFO</p>
-            <FieldRow label="First name" value={firstName} />
-            <FieldRow label="Last name"  value={lastName} />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+          gap: 16, marginBottom: 24,
+        }}>
+          <SectionCard title="Contact Info">
+            <FieldRow label="First Name" value={firstName} />
+            <FieldRow label="Last Name"  value={lastName} />
             <FieldRow label="Email"      value={email} copyable />
             <FieldRow label="Phone"      value={phone} copyable />
             <FieldRow label="Country"    value={country} />
-          </div>
+          </SectionCard>
 
-          <div style={{
-            background: '#111', border: '1px solid #1a1a1a',
-            borderRadius: 12, overflow: 'hidden',
-          }}>
-            <p style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-              padding: '16px 16px 12px', color: '#B8935A',
-              borderBottom: '1px solid #1a1a1a',
-            }}>SURVEY ANSWERS</p>
+          <SectionCard title="Survey Answers">
             <FieldRow label="Age" value={age} />
-            <FieldRow label="Biggest struggle" value={struggle} />
-            <FieldRow label="Would invest" value={invest} />
-            <FieldRow label="Bothered score" value={bothered} />
-          </div>
+            <FieldRow label="Biggest Struggle" value={struggle} />
+            <FieldRow label="Would Invest" value={invest} />
+            <FieldRow label="Bothered Score" value={bothered} />
+          </SectionCard>
         </div>
 
         {/* Notes */}
-        <div style={{
-          background: '#111', border: '1px solid #1a1a1a',
-          borderRadius: 12, padding: 20, marginBottom: 24,
-        }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12, color: '#B8935A' }}>
-            NOTES
-          </p>
-          <textarea
-            value={notes}
-            onChange={e => updateNotes(e.target.value)}
-            placeholder="Add notes about this contact..."
-            rows={6}
-            style={{
-              width: '100%', background: '#0d0d0d', color: '#e0e0e0',
-              border: '1px solid #333', padding: '10px 12px', borderRadius: 8,
-              fontSize: 14, resize: 'vertical', outline: 'none', lineHeight: 1.5,
-              fontFamily: 'inherit',
-            }}
-          />
-        </div>
+        <SectionCard title="Notes">
+          <div style={{ padding: 18 }}>
+            <textarea
+              value={notes}
+              onChange={e => updateNotes(e.target.value)}
+              placeholder="Add notes about this contact…"
+              rows={6}
+              style={{
+                width: '100%',
+                background: BRAND.bgInput,
+                color: BRAND.textPrimary,
+                border: `1px solid ${BRAND.border}`,
+                padding: '12px 14px',
+                fontSize: 13,
+                resize: 'vertical',
+                outline: 'none',
+                lineHeight: 1.6,
+                fontFamily: FONT_BODY,
+                letterSpacing: '0.01em',
+                transition: 'border-color 0.15s',
+              }}
+              onFocus={e => { e.target.style.borderColor = BRAND.borderGoldStrong }}
+              onBlur={e => { e.target.style.borderColor = BRAND.border }}
+            />
+          </div>
+        </SectionCard>
+
       </div>
-    </div>
+    </PageBackground>
   )
 }

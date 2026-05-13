@@ -12,6 +12,10 @@ const SECOND_MESSAGE = `While I have you here, what's been your biggest struggle
 
 const DM_DELAY_MS    = 2000
 
+// Window (in seconds) within which an echo of an identical outbound message
+// is treated as a duplicate of one the CRM just sent itself.
+const ECHO_DEDUPE_WINDOW_SEC = 60
+
 // ─── Verification (GET) ──────────────────────────────────────────────────────
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
@@ -63,15 +67,23 @@ export async function POST(request) {
 
       if (change.field === 'messages') {
         const msg = change.value
-        if (msg && !msg.is_echo) {
-          await handleIncomingDM(msg, platform)
+        if (msg) {
+          if (msg.is_echo) {
+            await handleEchoDM(msg, platform)
+          } else {
+            await handleIncomingDM(msg, platform)
+          }
         }
       }
     }
 
     for (const msg of entry.messaging || []) {
-      if (msg.message && !msg.message.is_echo) {
-        await handleIncomingDM(msg, platform)
+      if (msg.message) {
+        if (msg.message.is_echo) {
+          await handleEchoDM(msg, platform)
+        } else {
+          await handleIncomingDM(msg, platform)
+        }
       }
     }
   }
@@ -205,6 +217,59 @@ async function handleIncomingDM(msg, platform) {
   if (!lead.platform) updates.platform = platform
 
   await supabase.from('leads').update(updates).eq('id', lead.id)
+}
+
+// ─── Handle an echo (outbound DM Kyle sent from any client) ─────────────────
+// Meta echoes back every outbound message — including ones we send via /api/reply.
+// We dedupe by checking if an identical outbound message exists for this lead
+// within the last ECHO_DEDUPE_WINDOW_SEC seconds.
+async function handleEchoDM(msg, platform) {
+  // For echoes: sender is the page; recipient is the lead
+  const recipientPsid = msg.recipient?.id
+  const text          = msg.message?.text
+
+  if (!recipientPsid || !text) return
+
+  // Look up the lead this echo was sent TO
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('id')
+    .eq('psid', recipientPsid)
+    .maybeSingle()
+
+  if (!lead) {
+    // No matching lead — Kyle DM'd someone who isn't in the CRM yet.
+    // Skip; nothing to attach the message to.
+    return
+  }
+
+  // Dedupe: was an identical outbound message logged in the last 60s?
+  const cutoff = new Date(Date.now() - ECHO_DEDUPE_WINDOW_SEC * 1000).toISOString()
+  const { data: recentDupes } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('lead_id', lead.id)
+    .eq('direction', 'outbound')
+    .eq('content', text)
+    .gte('created_at', cutoff)
+    .limit(1)
+
+  if (recentDupes && recentDupes.length > 0) {
+    // Already logged by /api/reply (or a previous webhook delivery) — skip
+    return
+  }
+
+  // Genuine new outbound from Kyle's mobile app — log it
+  await supabase.from('messages').insert({
+    lead_id:   lead.id,
+    direction: 'outbound',
+    content:   text,
+  })
+
+  await supabase
+    .from('leads')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', lead.id)
 }
 
 // ─── Send a DM via the right Meta endpoint based on platform ─────────────────

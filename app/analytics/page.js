@@ -2,98 +2,158 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import {
+  BRAND, FONT_BODY, FONT_DISPLAY,
+  Eyebrow, GoldRule, DisplayHeading, PageBackground, PageHeader, BrandButton,
+  CornerBracket,
+} from '@/lib/brand'
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-
+// ─── Config ─────────────────────────────────────────────────────────────
 const CARDS = [
-  { key: 'messages sent', label: 'Messages Sent', color: '#B8935A' },
-  { key: 'qualifying',    label: 'Qualifying',    color: '#F0A500' },
-  { key: 'ghosted',       label: 'Ghosted',       color: '#666'    },
-  { key: 'link sent',     label: 'Link Sent',     color: '#9B59B6' },
-  { key: 'booked',        label: 'Booked',        color: '#2ECC71' },
-  { key: 'disqualified',  label: 'Disqualified',  color: '#E74C3C' },
+  { key: 'messages sent', label: 'Messages Sent', color: BRAND.gold },
+  { key: 'qualifying',    label: 'Qualifying',    color: BRAND.statusQualifying },
+  { key: 'ghosted',       label: 'Ghosted',       color: BRAND.statusGhosted },
+  { key: 'link sent',     label: 'Link Sent',     color: BRAND.statusLinkSent },
+  { key: 'booked',        label: 'Booked',        color: BRAND.statusBooked },
+  { key: 'disqualified',  label: 'Disqualified',  color: BRAND.statusDisqualified },
 ]
 
-const cardColor = (key) => CARDS.find(c => c.key === key)?.color || '#888'
+const cardColor = (key) => CARDS.find(c => c.key === key)?.color || BRAND.textMuted
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getPeriodLabel(date, timeframe) {
-  if (timeframe === 'monthly') {
-    return date.toLocaleDateString('en-US', { month: 'short' })
-  }
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
+// ─── Helpers ────────────────────────────────────────────────────────────
 function buildPeriods(leads, timeframe) {
-  const now    = new Date()
-  const count  = timeframe === 'weekly' ? 8 : timeframe === 'biweekly' ? 6 : 6
-  const days   = timeframe === 'weekly' ? 7 : timeframe === 'biweekly' ? 14 : 30
+  const now = new Date()
   const periods = []
 
-  for (let i = count - 1; i >= 0; i--) {
-    const end   = new Date(now)
-    end.setDate(end.getDate() - i * days)
-    const start = new Date(end)
-    start.setDate(start.getDate() - days)
+  // Daily = today (1 day bucket)
+  // Weekly = last 7 days, 1 bar per day
+  // Monthly = last 4 weeks, 1 bar per week
+  if (timeframe === 'monthly') {
+    const weekCount = 4
+    for (let i = weekCount - 1; i >= 0; i--) {
+      const end = new Date(now)
+      end.setHours(23, 59, 59, 999)
+      end.setDate(now.getDate() - i * 7)
+      const start = new Date(end)
+      start.setDate(end.getDate() - 6)
+      start.setHours(0, 0, 0, 0)
 
-    const label = timeframe === 'biweekly'
-      ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${end.toLocaleDateString('en-US', { day: 'numeric' })}`
-      : getPeriodLabel(end, timeframe)
+      const label = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${end.toLocaleDateString('en-US', { day: 'numeric' })}`
+      const tooltipLabel = `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
-    const periodLeads = leads.filter(l => {
+      const weekLeads = leads.filter(l => {
+        const d = new Date(l.created_at)
+        return d >= start && d <= end
+      })
+
+      periods.push({
+        label,
+        tooltipLabel,
+        values: {
+          'messages sent': weekLeads.length,
+          'qualifying':    weekLeads.filter(l => l.status === 'qualifying').length,
+          'ghosted':       weekLeads.filter(l => l.status === 'ghosted').length,
+          'link sent':     weekLeads.filter(l => l.status === 'link sent').length,
+          'booked':        weekLeads.filter(l => l.status === 'booked').length,
+          'disqualified':  weekLeads.filter(l => l.status === 'disqualified').length,
+        }
+      })
+    }
+    return periods
+  }
+
+  // Daily / Weekly: one bar per day
+  const dayCount = timeframe === 'daily' ? 1 : 7
+
+  for (let i = dayCount - 1; i >= 0; i--) {
+    const start = new Date(now)
+    start.setDate(now.getDate() - i)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 1)
+
+    const label = timeframe === 'daily'
+      ? 'Today'
+      : start.toLocaleDateString('en-US', { weekday: 'short' })
+
+    const dayLeads = leads.filter(l => {
       const d = new Date(l.created_at)
       return d >= start && d < end
     })
 
     periods.push({
       label,
+      tooltipLabel: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
       values: {
-        'messages sent': periodLeads.length,
-        'qualifying':    periodLeads.filter(l => l.status === 'qualifying').length,
-        'ghosted':       periodLeads.filter(l => l.status === 'ghosted').length,
-        'link sent':     periodLeads.filter(l => l.status === 'link sent').length,
-        'booked':        periodLeads.filter(l => l.status === 'booked').length,
-        'disqualified':  periodLeads.filter(l => l.status === 'disqualified').length,
+        'messages sent': dayLeads.length,
+        'qualifying':    dayLeads.filter(l => l.status === 'qualifying').length,
+        'ghosted':       dayLeads.filter(l => l.status === 'ghosted').length,
+        'link sent':     dayLeads.filter(l => l.status === 'link sent').length,
+        'booked':        dayLeads.filter(l => l.status === 'booked').length,
+        'disqualified':  dayLeads.filter(l => l.status === 'disqualified').length,
       }
     })
   }
   return periods
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const DumbbellIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <rect x="2"  y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="19" y="10" width="3"  height="4" rx="1" fill="#B8935A"/>
-    <rect x="5"  y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="17" y="8"  width="2"  height="8" rx="1" fill="#B8935A"/>
-    <rect x="7"  y="11" width="10" height="2" rx="1" fill="#B8935A"/>
-  </svg>
-)
-
+// ─── Rate Card ──────────────────────────────────────────────────────────
 function RateCard({ label, sublabel, value, color, detail }) {
   return (
-    <div className="p-5 rounded-lg" style={{ background: '#111', border: '1px solid #222' }}>
-      <p className="text-xs tracking-wider mb-1" style={{ color: '#555' }}>{label.toUpperCase()}</p>
-      <p className="text-xs mb-4" style={{ color: '#444' }}>{sublabel}</p>
-      <p className="text-4xl font-bold mb-4" style={{ color }}>{value}%</p>
-      <div className="w-full rounded-full mb-2" style={{ background: '#1a1a1a', height: '3px' }}>
-        <div className="rounded-full transition-all" style={{ width: `${value}%`, background: color, height: '3px' }} />
+    <div style={{
+      position: 'relative',
+      background: BRAND.bgCard,
+      border: `1px solid ${BRAND.border}`,
+      padding: '20px 22px',
+      overflow: 'hidden',
+    }}>
+      <CornerBracket position="tl" size={12} />
+      <CornerBracket position="tr" size={12} />
+      <CornerBracket position="bl" size={12} />
+      <CornerBracket position="br" size={12} />
+
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+        background: `linear-gradient(90deg, transparent, ${color}aa, transparent)`,
+        opacity: 0.5,
+      }} />
+
+      <Eyebrow color={color} style={{ fontSize: 10, letterSpacing: '0.25em', marginBottom: 6 }}>
+        {label}
+      </Eyebrow>
+      <p style={{
+        fontSize: 9, color: BRAND.textDim, marginBottom: 18,
+        fontFamily: FONT_BODY,
+        letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+      }}>{sublabel}</p>
+
+      <p style={{
+        fontFamily: FONT_DISPLAY,
+        fontSize: 44, fontWeight: 400,
+        color, lineHeight: 1,
+        letterSpacing: '0.02em',
+        marginBottom: 16,
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}<span style={{ fontSize: 26, opacity: 0.7 }}>%</span></p>
+
+      <div style={{ width: '100%', background: BRAND.bgRaised, height: 2, marginBottom: 12 }}>
+        <div style={{ width: `${value}%`, background: color, height: 2, transition: 'width 0.4s ease' }} />
       </div>
-      <p className="text-xs" style={{ color: '#444' }}>{detail}</p>
+      <p style={{
+        fontSize: 10, color: BRAND.textDim,
+        fontFamily: FONT_BODY,
+        letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+      }}>{detail}</p>
     </div>
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
+// ─── Main ───────────────────────────────────────────────────────────────
 export default function Analytics() {
   const [leads,       setLeads]       = useState([])
   const [loading,     setLoading]     = useState(true)
   const [timeframe,   setTimeframe]   = useState('weekly')
-  const [activeCards, setActiveCards] = useState(['booked', 'link sent'])
+  const [activeCards, setActiveCards] = useState(['messages sent', 'qualifying', 'link sent'])
 
   useEffect(() => { fetchData() }, [])
 
@@ -112,7 +172,6 @@ export default function Analytics() {
     )
   }
 
-  // ── Aggregate stats (all-time, not timeframe-scoped — these are totals)
   const totalSent      = leads.length
   const nQualifying    = leads.filter(l => l.status === 'qualifying').length
   const nGhosted       = leads.filter(l => l.status === 'ghosted').length
@@ -120,21 +179,18 @@ export default function Analytics() {
   const nBooked        = leads.filter(l => l.status === 'booked').length
   const nDisqualified  = leads.filter(l => l.status === 'disqualified').length
 
-  // "Responded" = everyone who made it past 'new' (qualifying, ghosted, link sent, booked, disqualified)
   const nResponded = leads.filter(l =>
     ['qualifying', 'ghosted', 'link sent', 'booked', 'disqualified'].includes(l.status)
   ).length
 
-  // "Ever qualified" = reached qualifying or beyond (before ghosting)
   const nEverQualified = leads.filter(l =>
     ['qualifying', 'ghosted', 'link sent', 'booked', 'disqualified'].includes(l.status)
   ).length
 
-  // Rates
-  const responseRate  = totalSent     > 0 ? Math.round((nResponded    / totalSent)     * 100) : 0
-  const ghostedRate   = nEverQualified > 0 ? Math.round((nGhosted      / nEverQualified) * 100) : 0
-  const linkSentRate  = nResponded    > 0 ? Math.round((nLinkSent     / nResponded)    * 100) : 0
-  const bookedRate    = nLinkSent     > 0 ? Math.round((nBooked       / nLinkSent)     * 100) : 0
+  const responseRate  = totalSent     > 0 ? Math.round((nResponded   / totalSent)     * 100) : 0
+  const ghostedRate   = nEverQualified > 0 ? Math.round((nGhosted     / nEverQualified) * 100) : 0
+  const linkSentRate  = nResponded    > 0 ? Math.round((nLinkSent    / nResponded)    * 100) : 0
+  const bookedRate    = nLinkSent     > 0 ? Math.round((nBooked      / nLinkSent)     * 100) : 0
 
   const statValues = {
     'messages sent': totalSent,
@@ -145,7 +201,6 @@ export default function Analytics() {
     'disqualified':  nDisqualified,
   }
 
-  // ── Chart data
   const periods = buildPeriods(leads, timeframe)
   const maxVal  = Math.max(
     ...periods.flatMap(p => activeCards.map(k => p.values[k] || 0)),
@@ -153,57 +208,91 @@ export default function Analytics() {
   )
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: '#0a0a0a' }}>
+    <PageBackground style={{ minHeight: '100vh' }}>
 
-      {/* Header */}
-      <div className="border-b px-8 py-4 flex items-center justify-between"
-        style={{ background: '#111', borderColor: '#222' }}>
+      <PageHeader
+        pageLabel="DM Analytics"
+        leftSlot={
+          <Link href="/inbox" style={{ textDecoration: 'none' }}>
+            <BrandButton variant="ghost" size="sm">← DM Pipeline</BrandButton>
+          </Link>
+        }
+        rightSlot={<div style={{ minWidth: 170 }} />}
+      />
 
-        {/* Left: Back to DM Pipeline */}
-        <Link href="/inbox"
-          style={{
-            background: '#1a1a1a', color: '#B8935A',
-            border: '1px solid #B8935A44', padding: '6px 12px',
-            borderRadius: 6, fontSize: 12, fontWeight: 500, textDecoration: 'none',
-          }}>← Back to DM Pipeline</Link>
+      <div style={{ padding: '32px 24px', maxWidth: 1280, margin: '0 auto' }}>
 
-        {/* Center: Brand */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-3">
-            <DumbbellIcon size={28} />
-            <h1 className="font-bold tracking-widest text-lg" style={{ color: '#B8935A' }}>LARGE DUMBBELLS</h1>
-          </div>
-          <p className="text-xs font-medium tracking-wider" style={{ color: '#fff' }}>
-            DM ANALYTICS
+        {/* Hero */}
+        <div style={{ marginBottom: 28 }}>
+          <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 10 }}>
+            Conversion Intelligence
+          </Eyebrow>
+          <DisplayHeading size={38} style={{ marginBottom: 12 }}>
+            DM <span style={{ color: BRAND.gold }}>Analytics</span>
+          </DisplayHeading>
+          <GoldRule width={40} />
+          <p style={{
+            fontSize: 11, marginTop: 14, color: BRAND.textMuted,
+            fontFamily: FONT_BODY,
+            letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600,
+          }}>
+            Click Any Card To Toggle It On The Chart
           </p>
         </div>
 
-        {/* Right: spacer to keep brand centered */}
-        <div style={{ width: 170 }} />
-      </div>
-
-      <div className="px-8 py-6 max-w-6xl mx-auto">
         {loading ? (
-          <p className="text-sm" style={{ color: '#555' }}>Loading...</p>
+          <Eyebrow color={BRAND.textDim}>Loading Analytics…</Eyebrow>
         ) : (
           <>
-            {/* Stat cards — click to toggle on chart */}
-            <div className="grid grid-cols-6 gap-3 mb-6">
+            {/* Stat cards */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: 12,
+              marginBottom: 24,
+            }}>
               {CARDS.map(card => {
                 const active = activeCards.includes(card.key)
                 return (
-                  <div key={card.key} onClick={() => toggleCard(card.key)}
-                    className="p-4 rounded-lg cursor-pointer transition-all select-none"
+                  <div key={card.key}
+                    onClick={() => toggleCard(card.key)}
                     style={{
-                      background:  active ? `${card.color}18` : '#111',
-                      border:      `1px solid ${active ? card.color : '#222'}`,
+                      position: 'relative',
+                      background: active ? `${card.color}13` : BRAND.bgCard,
+                      border: `1px solid ${active ? card.color : BRAND.border}`,
+                      padding: '16px 18px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      userSelect: 'none',
+                      overflow: 'hidden',
+                    }}
+                    onMouseEnter={e => {
+                      if (active) return
+                      e.currentTarget.style.borderColor = BRAND.borderGold
+                    }}
+                    onMouseLeave={e => {
+                      if (active) return
+                      e.currentTarget.style.borderColor = BRAND.border
                     }}>
-                    <p className="text-xs mb-2 tracking-wider"
-                      style={{ color: active ? card.color : '#555' }}>
-                      {card.label.toUpperCase()}
-                    </p>
-                    <p className="text-3xl font-bold"
-                      style={{ color: active ? card.color : '#444' }}>
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+                      background: `linear-gradient(90deg, transparent, ${card.color}aa, transparent)`,
+                      opacity: active ? 0.7 : 0.3,
+                    }} />
+                    <Eyebrow
+                      color={active ? card.color : BRAND.textMuted}
+                      style={{ fontSize: 9, letterSpacing: '0.25em', marginBottom: 10 }}>
+                      {card.label}
+                    </Eyebrow>
+                    <p style={{
+                      fontFamily: FONT_DISPLAY,
+                      fontSize: 30, fontWeight: 400,
+                      color: active ? card.color : BRAND.textSecondary,
+                      lineHeight: 1,
+                      letterSpacing: '0.02em',
+                      fontVariantNumeric: 'tabular-nums',
+                      margin: 0,
+                    }}>
                       {statValues[card.key]}
                     </p>
                   </div>
@@ -212,73 +301,146 @@ export default function Analytics() {
             </div>
 
             {/* Bar chart */}
-            <div className="p-5 rounded-lg mb-6" style={{ background: '#111', border: '1px solid #222' }}>
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-xs tracking-wider" style={{ color: '#555' }}>
-                  {activeCards.length === 0 ? 'SELECT A METRIC ABOVE TO CHART' : 'LEAD VOLUME BY PERIOD'}
-                </p>
-                <div className="flex gap-2">
-                  {['weekly', 'biweekly', 'monthly'].map(t => (
-                    <button key={t} onClick={() => setTimeframe(t)}
-                      className="text-xs px-3 py-1 rounded"
-                      style={{
-                        background:  timeframe === t ? '#B8935A' : '#1a1a1a',
-                        color:       timeframe === t ? '#000' : '#888',
-                        border:      '1px solid',
-                        borderColor: timeframe === t ? '#B8935A' : '#333',
-                      }}>
-                      {t}
-                    </button>
-                  ))}
+            <div style={{
+              position: 'relative',
+              background: BRAND.bgCard,
+              border: `1px solid ${BRAND.border}`,
+              padding: '22px 26px',
+              marginBottom: 24,
+            }}>
+              <CornerBracket position="tl" size={14} />
+              <CornerBracket position="tr" size={14} />
+              <CornerBracket position="bl" size={14} />
+              <CornerBracket position="br" size={14} />
+
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                marginBottom: 22, gap: 16, flexWrap: 'wrap',
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Eyebrow style={{ fontSize: 10, letterSpacing: '0.3em' }}>
+                    {activeCards.length === 0 ? 'Select A Metric Above' : 'Lead Volume By Period'}
+                  </Eyebrow>
+                  <GoldRule width={28} />
+                </div>
+                <div style={{
+                  display: 'flex', gap: 0,
+                  border: `1px solid ${BRAND.border}`,
+                }}>
+                  {['daily', 'weekly', 'monthly'].map((t, i) => {
+                    const active = timeframe === t
+                    return (
+                      <button key={t} onClick={() => setTimeframe(t)}
+                        style={{
+                          background: active ? BRAND.gold : 'transparent',
+                          color: active ? '#000' : BRAND.textMuted,
+                          border: 'none',
+                          borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
+                          padding: '6px 16px',
+                          fontSize: 10, fontWeight: 700,
+                          letterSpacing: '0.2em', textTransform: 'uppercase',
+                          fontFamily: FONT_BODY,
+                          cursor: 'pointer',
+                        }}>
+                        {t}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
               {activeCards.length === 0 ? (
-                <div className="flex items-center justify-center" style={{ height: '160px' }}>
-                  <p className="text-xs" style={{ color: '#333' }}>Click a metric card above to display it</p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  height: 160,
+                }}>
+                  <Eyebrow color={BRAND.textDim} style={{ fontSize: 10, letterSpacing: '0.3em' }}>
+                    Click A Metric Card Above To Display It
+                  </Eyebrow>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-end gap-2" style={{ height: '180px' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-end', gap: 8, height: 200,
+                    justifyContent: periods.length === 1 ? 'center' : 'flex-start',
+                  }}>
                     {periods.map((period, i) => (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-                        {/* Y-axis label for the tallest bar */}
-                        <div className="w-full flex items-end gap-0.5 justify-center" style={{ height: '155px' }}>
+                      <div key={i} style={{
+                        flex: periods.length === 1 ? '0 0 120px' : 1,
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', gap: 6,
+                        height: '100%', justifyContent: 'flex-end',
+                      }}>
+                        <div style={{
+                          width: '100%',
+                          display: 'flex', alignItems: 'flex-end', gap: 2,
+                          justifyContent: 'center',
+                          height: 168,
+                        }}>
                           {activeCards.map(key => {
                             const val = period.values[key] || 0
                             const pct = (val / maxVal) * 100
                             return (
-                              <div key={key}
-                                title={`${key}: ${val}`}
-                                className="flex-1 rounded-t-sm transition-all relative group"
+                              <div key={key} className="group"
+                                title={`${period.tooltipLabel} · ${key}: ${val}`}
                                 style={{
-                                  height:    `${Math.max(pct, val > 0 ? 3 : 0.5)}%`,
+                                  flex: 1,
+                                  height: `${Math.max(pct, val > 0 ? 3 : 0.5)}%`,
                                   background: cardColor(key),
-                                  opacity:   0.85,
-                                  minHeight: '2px',
+                                  opacity: 0.9,
+                                  minHeight: 2,
+                                  position: 'relative',
+                                  transition: 'all 0.3s',
                                 }}>
-                                {/* Tooltip on hover */}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-xs pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-                                  style={{ background: '#222', color: '#e0e0e0', border: '1px solid #333', zIndex: 10 }}>
+                                <div style={{
+                                  position: 'absolute', bottom: '100%', left: '50%',
+                                  transform: 'translateX(-50%)', marginBottom: 6,
+                                  padding: '3px 8px',
+                                  fontSize: 9, fontWeight: 700,
+                                  letterSpacing: '0.15em', textTransform: 'uppercase',
+                                  pointerEvents: 'none',
+                                  opacity: 0,
+                                  whiteSpace: 'nowrap',
+                                  background: '#000',
+                                  color: cardColor(key),
+                                  border: `1px solid ${cardColor(key)}55`,
+                                  fontFamily: FONT_BODY,
+                                  zIndex: 10,
+                                  transition: 'opacity 0.15s',
+                                }}
+                                className="bar-tooltip">
                                   {key}: {val}
                                 </div>
                               </div>
                             )
                           })}
                         </div>
-                        <span style={{ color: '#444', fontSize: '9px', whiteSpace: 'nowrap' }}>
+                        <Eyebrow color={BRAND.textDim} style={{
+                          fontSize: 8, letterSpacing: '0.15em',
+                          whiteSpace: 'nowrap',
+                        }}>
                           {period.label}
-                        </span>
+                        </Eyebrow>
                       </div>
                     ))}
                   </div>
 
                   {/* Legend */}
-                  <div className="flex gap-4 mt-4 flex-wrap">
+                  <div style={{
+                    display: 'flex', gap: 20, marginTop: 22, flexWrap: 'wrap',
+                    paddingTop: 16,
+                    borderTop: `1px solid ${BRAND.border}`,
+                  }}>
                     {activeCards.map(key => (
-                      <div key={key} className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ background: cardColor(key) }} />
-                        <span className="text-xs" style={{ color: '#888' }}>{key}</span>
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          width: 6, height: 6, borderRadius: 999,
+                          background: cardColor(key),
+                          boxShadow: `0 0 6px ${cardColor(key)}99`,
+                        }} />
+                        <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
+                          {key}
+                        </Eyebrow>
                       </div>
                     ))}
                   </div>
@@ -287,39 +449,56 @@ export default function Analytics() {
             </div>
 
             {/* Rate cards */}
-            <div className="grid grid-cols-4 gap-4">
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14,
+            }}>
+              <Eyebrow style={{ fontSize: 10, letterSpacing: '0.3em' }}>Conversion Funnel</Eyebrow>
+              <GoldRule width={28} />
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+            }}>
               <RateCard
                 label="Response Rate"
-                sublabel="Of messages sent, replied"
+                sublabel="Of Messages Sent, Replied"
                 value={responseRate}
-                color="#B8935A"
-                detail={`${nResponded} of ${totalSent} replied`}
+                color={BRAND.gold}
+                detail={`${nResponded} Of ${totalSent} Replied`}
               />
               <RateCard
                 label="Ghosted Rate"
-                sublabel="Of qualifying leads, went cold"
+                sublabel="Of Qualifying, Went Cold"
                 value={ghostedRate}
-                color="#666"
-                detail={`${nGhosted} of ${nEverQualified} ghosted`}
+                color={BRAND.statusGhosted}
+                detail={`${nGhosted} Of ${nEverQualified} Ghosted`}
               />
               <RateCard
                 label="Link Sent Rate"
-                sublabel="Of those who responded"
+                sublabel="Of Those Who Responded"
                 value={linkSentRate}
-                color="#9B59B6"
-                detail={`${nLinkSent} of ${nResponded} got the link`}
+                color={BRAND.statusLinkSent}
+                detail={`${nLinkSent} Of ${nResponded} Got The Link`}
               />
               <RateCard
                 label="Booked Rate"
-                sublabel="Of links sent → calls booked"
+                sublabel="Of Links Sent, Booked"
                 value={bookedRate}
-                color="#2ECC71"
-                detail={`${nBooked} of ${nLinkSent} booked`}
+                color={BRAND.statusBooked}
+                detail={`${nBooked} Of ${nLinkSent} Booked`}
               />
             </div>
           </>
         )}
       </div>
-    </div>
+
+      <style jsx>{`
+        :global(.group:hover .bar-tooltip) {
+          opacity: 1 !important;
+        }
+      `}</style>
+    </PageBackground>
   )
 }
