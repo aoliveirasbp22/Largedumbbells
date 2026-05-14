@@ -7,15 +7,16 @@ import { NextResponse } from 'next/server'
 
 const PUBLIC_PATHS = [
   '/login',
-  '/api/auth',              // Login endpoint — must be reachable without cookie
-  '/api/webhook',           // Meta webhook — must stay public
-  '/api/ghl-webhook',       // GHL webhook (if used) — must stay public
-  '/api/form-submit',       // Public form submission endpoint
-  '/form',                  // Public branded form page
-  '/privacy',               // Required public by Meta for app review
-  '/terms',                 // Required public by Meta for app review
-  '/api/unsubscribe',       // Public unsubscribe link from emails
-  '/api/mailgun-webhook',   // Mailgun fires delivery events here
+  '/api/auth',
+  '/api/webhook',
+  '/api/ghl-webhook',
+  '/api/form-submit',
+  '/form',
+  '/privacy',
+  '/terms',
+  '/api/unsubscribe',
+  '/api/mailgun-webhook',
+  '/api/cron/run-campaigns',
 ]
 
 const PUBLIC_PREFIXES = [

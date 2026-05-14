@@ -90,6 +90,14 @@ async function unsubscribe(leadId, token) {
       console.error('[unsubscribe] update failed:', updErr)
       return { ok: false, message: 'Could not process. Try again.' }
     }
+
+    // Exit any active enrollments for this lead
+    const { error: enrErr } = await supabase
+      .from('campaign_enrollments')
+      .update({ status: 'unsubscribed', updated_at: new Date().toISOString() })
+      .eq('contact_id', leadId)
+      .eq('status', 'active')
+    if (enrErr) console.error('[unsubscribe] enrollment exit error:', enrErr)
   }
 
   return { ok: true, name: lead.name || null }

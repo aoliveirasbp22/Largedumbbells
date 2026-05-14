@@ -71,7 +71,7 @@ export async function POST(req) {
     id: data.id,
   })
 
-  // ── Update leads suppression flags ─────────────────────────────────
+// ── Update leads suppression flags ─────────────────────────────────
   if (leadId) {
     const patch = { updated_at: new Date().toISOString() }
     if (event === 'failed' && data.severity === 'permanent') patch.bounced = true
@@ -81,6 +81,15 @@ export async function POST(req) {
     if (Object.keys(patch).length > 1) {
       const { error } = await supabase.from('leads').update(patch).eq('id', leadId)
       if (error) console.error('[mailgun-webhook] lead update error:', error)
+
+      // If lead got suppressed, exit any active enrollments
+      const exitStatus = patch.unsubscribed ? 'unsubscribed' : 'completed'
+      const { error: enrErr } = await supabase
+        .from('campaign_enrollments')
+        .update({ status: exitStatus, updated_at: new Date().toISOString() })
+        .eq('contact_id', leadId)
+        .eq('status', 'active')
+      if (enrErr) console.error('[mailgun-webhook] enrollment exit error:', enrErr)
     }
   }
 
