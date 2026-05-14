@@ -3,15 +3,15 @@
 // Vercel Cron hits this every minute. Finds all active enrollments where
 // next_action_at <= now(), processes their current step, advances them.
 //
+// Concurrency: we "claim" an enrollment by atomically pushing its
+// next_action_at 5 minutes into the future before processing. If two
+// cron instances fire simultaneously, only one will successfully claim
+// each enrollment — the other gets nothing back from .select() and skips.
+//
 // Step processing:
-//   - email: render template, call /api/send-email, advance position, set next_action_at to now
-//   - sms:   stub for now (Twilio not built yet) — skip and advance
+//   - email: render template, call /api/send-email, advance position
+//   - sms:   stub for now (Twilio not built yet)
 //   - wait:  schedule next_action_at to now + duration, advance position
-//
-// When a lead runs out of steps, status flips to 'completed'.
-//
-// Authentication: Vercel Cron sends a signed Authorization header.
-// In production, we verify CRON_SECRET matches.
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +26,10 @@ const MS_PER_UNIT = {
   days:    24 * 60 * 60 * 1000,
   weeks:   7 * 24 * 60 * 60 * 1000,
 }
+
+// How long to "lease" an enrollment while we process it. If processing
+// crashes mid-flight, the lease expires and the enrollment becomes due again.
+const CLAIM_LEASE_MS = 5 * 60 * 1000 // 5 minutes
 
 function strip(html) {
   if (!html) return ''
@@ -42,6 +46,27 @@ function strip(html) {
     .trim()
 }
 
+// Atomically claim an enrollment by pushing next_action_at forward.
+// Returns the fresh row if we won the race, or null if someone else got it.
+async function claimEnrollment(enrollmentId, expectedNextActionAt) {
+  const leaseUntil = new Date(Date.now() + CLAIM_LEASE_MS).toISOString()
+
+  const { data, error } = await supabase
+    .from('campaign_enrollments')
+    .update({ next_action_at: leaseUntil })
+    .eq('id', enrollmentId)
+    .eq('next_action_at', expectedNextActionAt) // optimistic concurrency check
+    .eq('status', 'active')
+    .select()
+    .maybeSingle()
+
+  if (error) {
+    console.error('[cron] claim failed:', error)
+    return null
+  }
+  return data // null means another instance got there first, or status changed
+}
+
 async function processEnrollment(enrollment) {
   // Load the campaign and its steps
   const { data: campaign } = await supabase
@@ -51,7 +76,6 @@ async function processEnrollment(enrollment) {
     .maybeSingle()
 
   if (!campaign || campaign.status !== 'active') {
-    // Campaign deleted or paused — pause this enrollment
     await supabase.from('campaign_enrollments')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
       .eq('id', enrollment.id)
@@ -74,16 +98,14 @@ async function processEnrollment(enrollment) {
 
   const step = steps[enrollment.current_step]
 
-  // Load the lead (contact_id may be uuid for new flow, or text for GHL legacy)
-  // Try uuid first
-  let lead = null
+  // Load the lead (contact_id must be a real uuid for cron to send)
   const isUuid = /^[0-9a-f-]{36}$/i.test(enrollment.contact_id)
+  let lead = null
   if (isUuid) {
     const { data } = await supabase
       .from('leads').select('*').eq('id', enrollment.contact_id).maybeSingle()
     lead = data
   }
-  // Fallback for GHL-legacy enrollments: skip — we can't email without a real lead record
   if (!lead) {
     await supabase.from('campaign_enrollments')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
@@ -91,7 +113,7 @@ async function processEnrollment(enrollment) {
     return { id: enrollment.id, action: 'no_lead_found', contact_id: enrollment.contact_id }
   }
 
-  // Check suppression: if lead has unsubscribed/bounced/complained, exit
+  // Suppression check
   if (lead.unsubscribed || lead.bounced || lead.complained) {
     await supabase.from('campaign_enrollments')
       .update({ status: 'unsubscribed', updated_at: new Date().toISOString() })
@@ -101,10 +123,10 @@ async function processEnrollment(enrollment) {
 
   // ── Process by step type ──────────────────────────────────────────
   let nextActionAt = new Date()
+  let sendFailed = false
 
   if (step.type === 'email') {
     if (!lead.email) {
-      // No email address — skip this step but advance
       console.warn(`[cron] lead ${lead.id} has no email, skipping email step`)
     } else {
       const subject = renderTemplate(step.subject || '', lead)
@@ -136,15 +158,25 @@ async function processEnrollment(enrollment) {
             status: res.status,
             data,
           })
-          return { id: enrollment.id, action: 'send_failed', detail: data }
+          sendFailed = true
         }
       } catch (err) {
         console.error('[cron] send-email threw for enrollment', enrollment.id, err)
-        return { id: enrollment.id, action: 'send_threw', error: String(err) }
+        sendFailed = true
+      }
+
+      if (sendFailed) {
+        // Release the lease so this gets retried in ~1 min (not the full 5)
+        await supabase.from('campaign_enrollments')
+          .update({
+            next_action_at: new Date(Date.now() + 60 * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', enrollment.id)
+        return { id: enrollment.id, action: 'send_failed_will_retry' }
       }
     }
   } else if (step.type === 'sms') {
-    // SMS not yet implemented — skip the step, log it
     console.log('[cron] sms step skipped (twilio not built yet) for enrollment', enrollment.id)
   } else if (step.type === 'wait') {
     const ms = (step.duration || 1) * (MS_PER_UNIT[step.unit] || MS_PER_UNIT.days)
@@ -177,19 +209,19 @@ async function processEnrollment(enrollment) {
 }
 
 export async function GET(req) {
-  // Verify cron secret (Vercel sends Authorization: Bearer <CRON_SECRET>)
+  // Vercel sends Authorization: Bearer <CRON_SECRET> for cron-triggered calls
   const authHeader = req.headers.get('authorization') || ''
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 })
   }
 
-  // Fetch due enrollments — uses our partial index for speed
+  // Fetch due enrollments
   const { data: due, error } = await supabase
     .from('campaign_enrollments')
     .select('*')
     .eq('status', 'active')
     .lte('next_action_at', new Date().toISOString())
-    .limit(50) // batch size — don't try to do everything at once
+    .limit(50)
 
   if (error) {
     console.error('[cron] fetch error:', error)
@@ -203,7 +235,13 @@ export async function GET(req) {
   const results = []
   for (const enr of due) {
     try {
-      const r = await processEnrollment(enr)
+      // Atomically claim. If another instance already grabbed it, skip.
+      const claimed = await claimEnrollment(enr.id, enr.next_action_at)
+      if (!claimed) {
+        results.push({ id: enr.id, action: 'skipped_already_claimed' })
+        continue
+      }
+      const r = await processEnrollment(claimed)
       results.push(r)
     } catch (err) {
       console.error('[cron] processEnrollment threw:', err)
