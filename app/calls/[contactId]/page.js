@@ -14,6 +14,9 @@ import {
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
 
+// Legacy GHL custom-field IDs. Kept so the render code below can stay unchanged.
+// fetchAll() synthesizes a customFields[] array with these IDs from Supabase columns,
+// then getField() looks up by ID just like before.
 const FIELD_IDS = {
   struggle: 'WtsEP55kDKmuYvjR3cRM',
   bothered: 'b9izCUDE2DcOqViZ6Da4',
@@ -164,20 +167,51 @@ export default function ContactProfile() {
   useEffect(() => { fetchAll() }, [contactId])
 
   async function fetchAll() {
-    let ghlContact = null
+    // Read lead from Supabase by UUID, then normalize to GHL-shape so the
+    // render code below (which expects contactName, firstName, customFields[])
+    // can stay unchanged.
+    let normalized = null
     try {
-      const res = await fetch('/api/ghl-contacts')
-      const data = await res.json()
-      ghlContact = (data.contacts || []).find(c => c.id === contactId) || null
+      const { data: lead, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', contactId)
+        .maybeSingle()
+      if (error) console.error('lead fetch error:', error)
+      if (lead) {
+        const name = lead.name || lead.ig_handle || ''
+        const parts = name.split(' ')
+        const firstName = parts[0] || ''
+        const lastName  = parts.slice(1).join(' ') || ''
+        normalized = {
+          id:          lead.id,
+          contactName: name,
+          firstName,
+          lastName,
+          email:       lead.email || '',
+          phone:       lead.phone || '',
+          country:     lead.country || '',
+          source:      lead.source || 'unknown',
+          dateAdded:   lead.created_at,
+          // Synthesize customFields[] so getField(cf, FIELD_IDS.x) works unchanged
+          customFields: [
+            { id: FIELD_IDS.struggle, value: lead.roadblock      ?? '' },
+            { id: FIELD_IDS.invest,   value: lead.would_invest   ?? '' },
+            { id: FIELD_IDS.bothered, value: lead.bothered_score != null ? String(lead.bothered_score) : '' },
+            { id: FIELD_IDS.age,      value: lead.age            != null ? String(lead.age) : '' },
+          ],
+        }
+      }
     } catch (err) {
-      console.error('GHL fetch error:', err)
+      console.error('fetchAll error:', err)
     }
-    setContact(ghlContact)
+    setContact(normalized)
 
+    // Load call_log by lead_id (uuid)
     const { data: logData } = await supabase
       .from('call_logs')
       .select('*')
-      .eq('ghl_contact_id', contactId)
+      .eq('lead_id', contactId)
       .maybeSingle()
 
     setCallLog(logData)
@@ -194,10 +228,10 @@ export default function ContactProfile() {
       if (callLog) {
         await supabase.from('call_logs')
           .update({ notes: value, updated_at: now })
-          .eq('ghl_contact_id', contactId)
+          .eq('lead_id', contactId)
       } else {
         const { data } = await supabase.from('call_logs')
-          .insert({ ghl_contact_id: contactId, notes: value })
+          .insert({ lead_id: contactId, notes: value })
           .select().single()
         setCallLog(data)
       }
@@ -211,19 +245,23 @@ export default function ContactProfile() {
     if (callLog) {
       const { data } = await supabase.from('call_logs')
         .update({ tag: newTag, last_contacted: now, updated_at: now })
-        .eq('ghl_contact_id', contactId)
+        .eq('lead_id', contactId)
         .select().single()
       setCallLog(data)
     } else {
       const { data } = await supabase.from('call_logs')
-        .insert({ ghl_contact_id: contactId, tag: newTag, last_contacted: now })
+        .insert({ lead_id: contactId, tag: newTag, last_contacted: now })
         .select().single()
       setCallLog(data)
     }
     setLastSaved(new Date())
 
-    // Trigger campaign enrollment logic
-    handleTagChange(contactId, newTag)
+    // Trigger campaign enrollment logic (UUID-aware)
+    try {
+      await handleTagChange(contactId, newTag)
+    } catch (err) {
+      console.error('handleTagChange error:', err)
+    }
   }
 
   if (loading) {
