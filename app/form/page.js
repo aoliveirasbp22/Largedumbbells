@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground,
@@ -168,13 +168,8 @@ export default function FormPage() {
 
           {/* Intro */}
           <div style={{ marginBottom: isMobile ? 28 : 36 }}>
-            <Eyebrow color={BRAND.textMuted} style={{
-              fontSize: 10, letterSpacing: '0.35em', marginBottom: 10,
-            }}>
-              Get The Blueprint
-            </Eyebrow>
             <DisplayHeading size={isMobile ? 28 : 36} style={{ marginBottom: 14, lineHeight: 1.15 }}>
-              Tell Us About You
+              Get The Blueprint
             </DisplayHeading>
             <GoldRule width={40} />
             <p style={{
@@ -283,19 +278,11 @@ export default function FormPage() {
             </Field>
 
             <Field dataField="country" label="Country" error={errors.country}>
-              <SelectInput
+              <CountryInput
                 value={values.country}
                 onChange={v => setField('country', v)}
-                hasError={!!errors.country}>
-                <option value="" disabled style={{ background: BRAND.bgCard }}>
-                  Choose your country
-                </option>
-                {COUNTRIES.map(c => (
-                  <option key={c} value={c} style={{ background: BRAND.bgCard, color: BRAND.textPrimary }}>
-                    {c}
-                  </option>
-                ))}
-              </SelectInput>
+                hasError={!!errors.country}
+              />
             </Field>
           </div>
 
@@ -513,6 +500,124 @@ function ScalePicker({ value, onChange, isMobile }) {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function CountryInput({ value, onChange, hasError }) {
+  const [query, setQuery]   = useState(value || '')
+  const [open, setOpen]     = useState(false)
+  const [highlight, setHighlight] = useState(0)
+  const wrapRef = useRef(null)
+
+  // Keep input in sync if parent updates value externally
+  useEffect(() => { setQuery(value || '') }, [value])
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [])
+
+  const q = query.trim().toLowerCase()
+  const matches = q
+    ? COUNTRIES.filter(c => c.toLowerCase().includes(q)).slice(0, 8)
+    : COUNTRIES.slice(0, 8)
+
+  function pick(c) {
+    onChange(c)
+    setQuery(c)
+    setOpen(false)
+  }
+
+  function onKeyDown(e) {
+    if (!open) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlight(h => Math.min(h + 1, matches.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlight(h => Math.max(h - 1, 0))
+    } else if (e.key === 'Enter') {
+      if (matches[highlight]) {
+        e.preventDefault()
+        pick(matches[highlight])
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={query}
+        onChange={e => {
+          setQuery(e.target.value)
+          setOpen(true)
+          setHighlight(0)
+          // Clear parent value if user is editing — they must pick again
+          if (value && e.target.value !== value) onChange('')
+        }}
+        onFocus={e => {
+          setOpen(true)
+          if (!hasError) e.target.style.borderColor = BRAND.borderGoldStrong
+          e.target.style.background = BRAND.bgRaised
+        }}
+        onBlur={e => {
+          if (!hasError) e.target.style.borderColor = BRAND.border
+          e.target.style.background = BRAND.bgCard
+        }}
+        onKeyDown={onKeyDown}
+        placeholder="Start typing your country…"
+        autoComplete="off"
+        style={baseInputStyle(hasError)}
+      />
+
+      {open && matches.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: BRAND.bgRaised,
+          border: `1px solid ${BRAND.borderStrong}`,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
+          zIndex: 50,
+          maxHeight: 280,
+          overflowY: 'auto',
+        }}>
+          {matches.map((c, i) => {
+            const isHl = i === highlight
+            return (
+              <div
+                key={c}
+                onMouseDown={e => { e.preventDefault(); pick(c) }}
+                onMouseEnter={() => setHighlight(i)}
+                style={{
+                  padding: '12px 16px',
+                  minHeight: 44,
+                  fontSize: 14,
+                  fontFamily: FONT_BODY,
+                  letterSpacing: '0.01em',
+                  color: isHl ? BRAND.gold : BRAND.textSecondary,
+                  background: isHl ? 'rgba(176, 131, 74, 0.13)' : 'transparent',
+                  cursor: 'pointer',
+                  borderBottom: `1px solid ${BRAND.border}`,
+                  display: 'flex', alignItems: 'center',
+                }}>
+                {c}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
