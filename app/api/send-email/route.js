@@ -4,13 +4,32 @@
 // Returns the Mailgun message-id on success so callers can correlate
 // later webhook events (delivered, bounced, complained).
 //
+// When leadId is provided:
+//   - Suppression checks (unsubscribed/bounced/complained → 409)
+//   - Appends signed unsubscribe link to body
+//   - Adds List-Unsubscribe headers (Gmail/Apple native button)
+//   - Logs to messages table with external_id for webhook correlation
+//
 // Required env vars:
-//   MAILGUN_API_KEY    — sending key from Mailgun > Domain Settings > Sending keys
-//   MAILGUN_DOMAIN     — the verified sending domain (e.g. largedumbbells.com)
-//   MAILGUN_REGION     — 'US' (default) or 'EU'
+//   MAILGUN_API_KEY      — sending key from Mailgun > Domain Settings > Sending keys
+//   MAILGUN_DOMAIN       — the verified sending domain (e.g. largedumbbells.com)
+//   MAILGUN_REGION       — 'US' (default) or 'EU'
+//   UNSUBSCRIBE_SECRET   — random 32+ char string for signing unsub tokens
+//
+// Body (JSON):
+//   to        : string — recipient email
+//   subject   : string
+//   text      : string — plain text body (recommended)
+//   html      : string — optional HTML body
+//   leadId    : uuid   — optional, enables suppression checks + unsubscribe link
+//   fromName  : string — optional, defaults to "Large Dumbbells"
+//   replyTo   : string — optional reply-to
+//
+// Returns 200 with { ok: true, mailgunId } on success.
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { unsubscribeUrl } from '@/lib/unsubscribe'
 
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY
 const MAILGUN_DOMAIN  = process.env.MAILGUN_DOMAIN
@@ -35,6 +54,7 @@ export async function POST(req) {
 
   const { to, subject, text, html, leadId, fromName, replyTo } = body || {}
 
+  // ── Basic validation ──────────────────────────────────────────────────
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     return NextResponse.json({ ok: false, reason: 'invalid_to' }, { status: 400 })
   }
@@ -45,6 +65,7 @@ export async function POST(req) {
     return NextResponse.json({ ok: false, reason: 'missing_body' }, { status: 400 })
   }
 
+  // ── Suppression check ─────────────────────────────────────────────────
   if (leadId) {
     const { data: lead } = await supabase
       .from('leads')
@@ -57,16 +78,53 @@ export async function POST(req) {
     if (lead?.complained)   return NextResponse.json({ ok: false, reason: 'complained' }, { status: 409 })
   }
 
+  // ── Build Mailgun request ──────────────────────────────────────────────
   const form = new URLSearchParams()
   form.append('from', `${fromName || DEFAULT_FROM_NAME} <${DEFAULT_FROM_USER}@${MAILGUN_DOMAIN}>`)
   form.append('to', to)
   form.append('subject', subject)
-  if (text) form.append('text', text)
-  if (html) form.append('html', html)
+
+  // Unsubscribe link (only when we have a lead to associate)
+  let unsubUrl = null
+  if (leadId) {
+    try {
+      unsubUrl = unsubscribeUrl(leadId)
+    } catch (err) {
+      console.error('[send-email] unsubscribe url failed:', err)
+      return NextResponse.json({ ok: false, reason: 'unsub_secret_missing' }, { status: 500 })
+    }
+  }
+
+  const textBody = text
+    ? (unsubUrl ? `${text}\n\n---\nUnsubscribe: ${unsubUrl}` : text)
+    : null
+  const htmlBody = html
+    ? (unsubUrl
+        ? `${html}<hr style="border:none;border-top:1px solid #ccc;margin:32px 0 16px"/><p style="font-size:12px;color:#888;text-align:center"><a href="${unsubUrl}" style="color:#888">Unsubscribe</a></p>`
+        : html)
+    : null
+
+  if (textBody) form.append('text', textBody)
+  if (htmlBody) form.append('html', htmlBody)
   if (replyTo) form.append('h:Reply-To', replyTo)
+
+  // RFC 8058 one-click unsubscribe + RFC 2369 list-unsubscribe headers
+  // (Gmail/Apple Mail render a native Unsubscribe button when present)
+  if (unsubUrl) {
+    form.append('h:List-Unsubscribe', `<${unsubUrl}>`)
+    form.append('h:List-Unsubscribe-Post', 'List-Unsubscribe=One-Click')
+  }
+
+  // Tag for correlation in webhook events
   if (leadId) form.append('v:leadId', leadId)
   form.append('o:tag', 'crm')
 
+  // No open/click tracking — cleaner emails, better deliverability
+  form.append('o:tracking', 'no')
+  form.append('o:tracking-clicks', 'no')
+  form.append('o:tracking-opens', 'no')
+
+  // ── Send via Mailgun ───────────────────────────────────────────────────
   const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64')
   const url = `${MAILGUN_BASE}/${MAILGUN_DOMAIN}/messages`
 
@@ -94,28 +152,20 @@ export async function POST(req) {
       url,
       domain: MAILGUN_DOMAIN,
       region: MAILGUN_REGION,
-      keyLength: MAILGUN_API_KEY.length,
-      keyPrefix: MAILGUN_API_KEY.slice(0, 6),
     })
     return NextResponse.json(
       {
         ok: false,
         reason: 'mailgun_error',
         status: mgRes.status,
-        raw: mgRaw,           // ← now we see Mailgun's actual message
+        raw: mgRaw,
         detail: mgData,
-        debug: {
-          url,
-          domain: MAILGUN_DOMAIN,
-          region: MAILGUN_REGION,
-          keyLength: MAILGUN_API_KEY.length,
-          keyPrefix: MAILGUN_API_KEY.slice(0, 6),
-        }
       },
       { status: 502 }
     )
   }
 
+  // ── Log to messages table ──────────────────────────────────────────────
   if (leadId) {
     const { error: logErr } = await supabase.from('messages').insert({
       lead_id: leadId,

@@ -14,6 +14,8 @@ const PUBLIC_PATHS = [
   '/form',                  // Public branded form page
   '/privacy',               // Required public by Meta for app review
   '/terms',                 // Required public by Meta for app review
+  '/api/unsubscribe',       // Public unsubscribe link from emails
+  '/api/mailgun-webhook',   // Mailgun fires delivery events here
 ]
 
 const PUBLIC_PREFIXES = [
