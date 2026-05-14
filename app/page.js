@@ -9,6 +9,9 @@ import {
   useIsMobile,
 } from '@/lib/brand'
 
+// Legacy GHL field IDs — kept so getField() and downstream filters
+// can stay unchanged. fetchAll() synthesizes a customFields[] array
+// from Supabase columns with these same IDs.
 const FIELD_IDS = {
   struggle: 'WtsEP55kDKmuYvjR3cRM',
   bothered: 'b9izCUDE2DcOqViZ6Da4',
@@ -66,6 +69,26 @@ function isInGreenWindow(phone) {
 
 function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
+}
+
+// Normalize a Supabase leads row into the GHL-shape that the rest of
+// this dashboard expects (contactName, dateAdded, customFields[], etc).
+function leadToContact(l) {
+  const name = l.name || l.ig_handle || ''
+  return {
+    id:          l.id,
+    contactName: name,
+    email:       l.email || '',
+    phone:       l.phone || '',
+    country:     l.country || '',
+    dateAdded:   l.created_at,
+    customFields: [
+      { id: FIELD_IDS.struggle, value: l.roadblock      ?? '' },
+      { id: FIELD_IDS.invest,   value: l.would_invest   ?? '' },
+      { id: FIELD_IDS.bothered, value: l.bothered_score != null ? String(l.bothered_score) : '' },
+      { id: FIELD_IDS.age,      value: l.age            != null ? String(l.age) : '' },
+    ],
+  }
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────
@@ -510,8 +533,8 @@ export default function Home() {
 
   const [leads, setLeads] = useState([])
   const [messages, setMessages] = useState([])
-  const [contacts, setContacts] = useState([])
-  const [callLogs, setCallLogs] = useState({})
+  const [contacts, setContacts] = useState([])      // normalized leads → GHL-shape
+  const [callLogs, setCallLogs] = useState({})       // keyed by lead_id (uuid)
   const [callLogsList, setCallLogsList] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -520,19 +543,21 @@ export default function Home() {
   async function fetchAll() {
     try {
       const { data: leadsData } = await supabase.from('leads').select('*')
-      setLeads(leadsData || [])
+      const leadsList = leadsData || []
+      setLeads(leadsList)
 
       const { data: msgsData } = await supabase.from('messages')
         .select('*').order('created_at', { ascending: false })
       setMessages(msgsData || [])
 
-      const res = await fetch('/api/ghl-contacts')
-      const data = await res.json()
-      setContacts(data.contacts || [])
+      // Normalize the same leads list into GHL-shape for the Outreach card.
+      // No second query needed — reuse data we already have.
+      setContacts(leadsList.map(leadToContact))
 
-      const { data: logs } = await supabase.from('call_logs').select('*')
+      const { data: logs } = await supabase.from('call_logs')
+        .select('*').not('lead_id', 'is', null)
       const logsMap = {}
-      logs?.forEach(log => { logsMap[log.ghl_contact_id] = log })
+      logs?.forEach(log => { logsMap[log.lead_id] = log })
       setCallLogs(logsMap)
       setCallLogsList(logs || [])
     } catch (err) { console.error('Fetch error:', err) }

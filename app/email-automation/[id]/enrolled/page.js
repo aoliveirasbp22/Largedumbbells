@@ -55,17 +55,30 @@ export default function EnrolledPage() {
     const { data: e } = await supabase
       .from('campaign_enrollments').select('*')
       .eq('campaign_id', id).eq('status', 'active')
-    setEnrollments(e || [])
+    const enrollmentList = e || []
+    setEnrollments(enrollmentList)
 
-    // Fetch GHL contacts to resolve names
-    try {
-      const res = await fetch('/api/ghl-contacts')
-      const data = await res.json()
+    // Resolve contact_id → lead name/email by querying Supabase leads directly.
+    // enrollment.contact_id is text-typed but holds lead UUIDs. We only fetch
+    // the leads we actually need, instead of pulling everything.
+    const contactIds = [...new Set(enrollmentList.map(e => e.contact_id).filter(Boolean))]
+    if (contactIds.length > 0) {
+      const { data: leads, error } = await supabase
+        .from('leads')
+        .select('id, name, ig_handle, email')
+        .in('id', contactIds)
+      if (error) console.error('Failed to load leads for enrollments:', error)
       const map = {}
-      ;(data.contacts || []).forEach(c => { map[c.id] = c })
+      ;(leads || []).forEach(l => {
+        map[l.id] = {
+          id: l.id,
+          contactName: l.name || l.ig_handle || '',
+          email: l.email || '',
+        }
+      })
       setContactsById(map)
-    } catch (err) {
-      console.error('Failed to fetch GHL contacts:', err)
+    } else {
+      setContactsById({})
     }
 
     setLoading(false)
