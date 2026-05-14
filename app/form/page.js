@@ -171,7 +171,7 @@ export default function FormPage() {
 
       {/* Body */}
       <div style={{
-        padding: isMobile ? '24px 16px 120px' : '40px 32px 120px',
+        padding: isMobile ? '24px 16px 40px' : '40px 32px 56px',
       }}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
@@ -336,12 +336,8 @@ export default function FormPage() {
         </div>
       </div>
 
-      {/* Sticky submit */}
       <div style={{
-        position: 'sticky', bottom: 0,
-        background: `linear-gradient(to top, ${BRAND.bg} 70%, transparent)`,
-        padding: isMobile ? '16px 16px calc(16px + env(safe-area-inset-bottom))' : '20px 32px',
-        zIndex: 10,
+        padding: isMobile ? '0 16px 40px' : '0 32px 56px',
       }}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
           <BrandButton
