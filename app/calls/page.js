@@ -13,13 +13,6 @@ import {
   useIsMobile,
 } from '@/lib/brand'
 
-const FIELD_IDS = {
-  struggle: 'WtsEP55kDKmuYvjR3cRM',
-  bothered: 'b9izCUDE2DcOqViZ6Da4',
-  age:      'gvlEzRdj7FhoOw6Yk0p6',
-  invest:   'xLhl7frOJAopwN0r94gX'
-}
-
 // ─── Country codes ─────────────────────────────────────────────────────
 const COUNTRY_CODES = {
   AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AD:'Andorra',AO:'Angola',AG:'Antigua and Barbuda',
@@ -410,9 +403,88 @@ function NotesCell({ contactId, initialNote, onSave }) {
   )
 }
 
+// ─── Delete confirmation modal ────────────────────────────────────────
+function DeleteConfirmModal({ contact, onConfirm, onCancel }) {
+  if (!contact) return null
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.85)',
+        zIndex: 300,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          background: BRAND.bgCard,
+          border: `1px solid ${BRAND.statusDisqualified}`,
+          padding: '28px 32px',
+          maxWidth: 460,
+          width: '100%',
+          boxShadow: `0 0 32px rgba(220, 80, 80, 0.2)`,
+        }}>
+        <CornerBracket position="tl" size={14} color={BRAND.statusDisqualified} />
+        <CornerBracket position="tr" size={14} color={BRAND.statusDisqualified} />
+        <CornerBracket position="bl" size={14} color={BRAND.statusDisqualified} />
+        <CornerBracket position="br" size={14} color={BRAND.statusDisqualified} />
+
+        <Eyebrow color={BRAND.statusDisqualified} style={{ fontSize: 10, letterSpacing: '0.3em', marginBottom: 8 }}>
+          Permanent Delete
+        </Eyebrow>
+        <GoldRule width={24} />
+
+        <p style={{
+          fontFamily: FONT_DISPLAY,
+          fontSize: 22, color: BRAND.textPrimary,
+          marginTop: 14, marginBottom: 10,
+          letterSpacing: '0.01em',
+        }}>
+          Delete {contact.contactName || 'this contact'}?
+        </p>
+
+        <p style={{
+          fontSize: 12, color: BRAND.textMuted,
+          fontFamily: FONT_BODY, lineHeight: 1.6,
+          marginBottom: 22,
+        }}>
+          This will permanently remove the contact, their call log, notes, tag history,
+          campaign enrollments, and message history. <strong style={{ color: BRAND.statusDisqualified }}>This cannot be undone.</strong>
+        </p>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <BrandButton variant="ghost" size="md" onClick={onCancel}>
+            Cancel
+          </BrandButton>
+          <button onClick={onConfirm}
+            style={{
+              background: BRAND.statusDisqualified,
+              color: '#fff',
+              border: 'none',
+              padding: '10px 20px',
+              fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              fontFamily: FONT_BODY,
+              cursor: 'pointer',
+            }}>
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Mobile filter sheet ──────────────────────────────────────────────
-// Slides up from the bottom on mobile. Shows every filter section grouped.
-function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue, callWindowColors, callWindowLabels, formatCallLabel }) {
+function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue, callWindowColors, callWindowLabels }) {
+  const [search, setSearch] = useState({})
+  function setSearchFor(key, v) {
+    setSearch(prev => ({ ...prev, [key]: v }))
+  }
+
   if (!open) return null
 
   const sections = [
@@ -422,12 +494,8 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
     { key: 'invest',     label: 'Would Invest' },
     { key: 'bothered',   label: 'Bothered Score' },
     { key: 'age',        label: 'Age' },
+    { key: 'source',     label: 'Source' },
   ]
-
-  const [search, setSearch] = useState({})
-  function setSearchFor(key, v) {
-    setSearch(prev => ({ ...prev, [key]: v }))
-  }
 
   return (
     <div
@@ -452,7 +520,6 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
         <CornerBracket position="tl" size={14} />
         <CornerBracket position="tr" size={14} />
 
-        {/* Header */}
         <div style={{
           padding: '18px 20px',
           borderBottom: `1px solid ${BRAND.border}`,
@@ -475,7 +542,6 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
             }}>Close ✕</button>
         </div>
 
-        {/* Sections */}
         <div style={{ padding: '12px 16px 24px' }}>
           {sections.map(section => {
             const opts = filterOptions[section.key] || []
@@ -561,16 +627,14 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
 }
 
 // ─── Mobile contact card ──────────────────────────────────────────────
-function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef, getField, getCountryName, fieldIds, callLogs, router }) {
-  const cf = contact.customFields || []
-  const struggle = getField(cf, fieldIds.struggle)
-  const invest   = getField(cf, fieldIds.invest)
-  const bothered = getField(cf, fieldIds.bothered)
-  const age      = getField(cf, fieldIds.age)
+function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, contactRef, router }) {
+  const struggle = contact.roadblock || '—'
+  const invest   = contact.would_invest || '—'
+  const bothered = contact.bothered_score ?? '—'
+  const age      = contact.age ?? '—'
   const country  = getCountryName(contact.country)
 
   function goToProfile(e) {
-    // Skip if user tapped an interactive child (links, selects, buttons)
     const t = e.target
     if (t.closest('a, select, button')) return
     router.push(`/calls/${contact.id}`)
@@ -595,7 +659,6 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef,
       <CornerBracket position="bl" size={10} />
       <CornerBracket position="br" size={10} />
 
-      {/* Top row: avatar + name + tag */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
           width: 32, height: 32, borderRadius: 999, flexShrink: 0,
@@ -643,10 +706,8 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef,
         </select>
       </div>
 
-      {/* Key info row: age, country, local time */}
       <MobileLocalTimeRow phone={contact.phone} country={country} age={age} />
 
-      {/* Struggle */}
       {struggle && struggle !== '—' && (
         <p style={{
           fontSize: 11, color: BRAND.textSecondary,
@@ -657,7 +718,6 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef,
         </p>
       )}
 
-      {/* Bothered + invest line */}
       {(bothered !== '—' || (invest && invest !== '—')) && (
         <div style={{
           display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
@@ -683,49 +743,68 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, contactRef,
         </div>
       )}
 
-      {/* Phone row */}
-      {contact.phone && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          paddingTop: 8,
-          borderTop: `1px solid ${BRAND.border}`,
-        }}>
-          <a
-            href={`tel:${phoneHref(contact.phone)}`}
-            onClick={e => e.stopPropagation()}
-            style={{
-              flex: 1,
-              fontSize: 12, color: BRAND.gold,
-              fontFamily: FONT_BODY,
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '0.02em',
-              textDecoration: 'none',
-            }}>
-            {formatPhone(contact.phone)}
-          </a>
-          <a
-            href={`tel:${phoneHref(contact.phone)}`}
-            onClick={e => e.stopPropagation()}
-            style={{
-              padding: '6px 12px',
-              fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.2em', textTransform: 'uppercase',
-              color: BRAND.gold,
-              background: 'rgba(176, 131, 74, 0.13)',
-              border: `1px solid ${BRAND.borderGoldStrong}`,
-              fontFamily: FONT_BODY,
-              textDecoration: 'none',
-              flexShrink: 0,
-            }}>
-            Call
-          </a>
-        </div>
-      )}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        paddingTop: 8,
+        borderTop: `1px solid ${BRAND.border}`,
+      }}>
+        {contact.phone ? (
+          <>
+            <a
+              href={`tel:${phoneHref(contact.phone)}`}
+              onClick={e => e.stopPropagation()}
+              style={{
+                flex: 1,
+                fontSize: 12, color: BRAND.gold,
+                fontFamily: FONT_BODY,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '0.02em',
+                textDecoration: 'none',
+              }}>
+              {formatPhone(contact.phone)}
+            </a>
+            <a
+              href={`tel:${phoneHref(contact.phone)}`}
+              onClick={e => e.stopPropagation()}
+              style={{
+                padding: '6px 12px',
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                color: BRAND.gold,
+                background: 'rgba(176, 131, 74, 0.13)',
+                border: `1px solid ${BRAND.borderGoldStrong}`,
+                fontFamily: FONT_BODY,
+                textDecoration: 'none',
+                flexShrink: 0,
+              }}>
+              Call
+            </a>
+          </>
+        ) : (
+          <span style={{ flex: 1, fontSize: 11, color: BRAND.textDim, fontFamily: FONT_BODY }}>
+            No phone
+          </span>
+        )}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(contact) }}
+          title="Delete contact"
+          style={{
+            padding: '6px 10px',
+            fontSize: 11,
+            color: BRAND.statusDisqualified,
+            background: 'transparent',
+            border: `1px solid ${BRAND.border}`,
+            fontFamily: FONT_BODY,
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}>
+          ✕
+        </button>
+      </div>
     </div>
   )
 }
 
-// Mobile-friendly local time + age + country row (one inline line)
 function MobileLocalTimeRow({ phone, country, age }) {
   const [info, setInfo] = useState(null)
   useEffect(() => {
@@ -773,10 +852,6 @@ function getCountryName(code) {
   return COUNTRY_CODES[code.toUpperCase()] || code
 }
 
-function getField(customFields, id) {
-  return customFields?.find(f => f.id === id)?.value || '—'
-}
-
 function timeAgo(dateStr) {
   if (!dateStr) return '—'
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -800,7 +875,7 @@ export default function Calls() {
   const isMobile = useIsMobile()
   const router = useRouter()
   const [contacts, setContacts] = useState([])
-  const [callLogs, setCallLogs] = useState({})
+  const [callLogs, setCallLogs] = useState({}) // keyed by lead id (uuid)
   const [loading, setLoading] = useState(true)
   const [hydrated, setHydrated] = useState(false)
   const [search, setSearch] = useState('')
@@ -809,9 +884,10 @@ export default function Calls() {
   const [perPage, setPerPage] = useState(20)
   const [page, setPage] = useState(1)
   const [selectedRow, setSelectedRow] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const [filters, setFilters] = useState({
-    country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [],
+    country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [], source: [],
   })
   const [openFilter, setOpenFilter] = useState(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -826,7 +902,7 @@ export default function Calls() {
   }
 
   function clearAllFilters() {
-    setFilters({ country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [] })
+    setFilters({ country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [], source: [] })
     setSearch('')
     setPage(1)
   }
@@ -836,7 +912,6 @@ export default function Calls() {
 
   useEffect(() => { fetchData() }, [])
 
-  // Hydrate from localStorage ONCE on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem('callsListState')
@@ -847,7 +922,7 @@ export default function Calls() {
         if (state.timeframe)            setTimeframe(state.timeframe)
         if (state.perPage)              setPerPage(state.perPage)
         if (state.page)                 setPage(state.page)
-        if (state.filters)              setFilters(state.filters)
+        if (state.filters)              setFilters({ source: [], ...state.filters })
         if (state.selectedRow)          setSelectedRow(state.selectedRow)
       }
     } catch (err) {
@@ -856,7 +931,6 @@ export default function Calls() {
     setHydrated(true)
   }, [])
 
-  // Save state on every change (after hydration)
   useEffect(() => {
     if (!hydrated) return
     try {
@@ -868,14 +942,11 @@ export default function Calls() {
     }
   }, [hydrated, search, sortBy, timeframe, perPage, page, filters, selectedRow])
 
-  // Scroll to highlighted row when restored
   useEffect(() => {
     if (!loading && selectedRow) {
       setTimeout(() => {
         const el = document.getElementById(`contact-row-${selectedRow}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 150)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -883,38 +954,102 @@ export default function Calls() {
 
   async function fetchData() {
     try {
-      const res = await fetch('/api/ghl-contacts')
-      const data = await res.json()
-      setContacts(data.contacts || [])
-      const { data: logs } = await supabase.from('call_logs').select('*')
+      // Read leads from Supabase, normalize to the shape the rest of the UI expects
+      const { data: leads, error } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Failed to load leads:', error)
+        setContacts([])
+        setCallLogs({})
+        setLoading(false)
+        return
+      }
+
+      // Normalize: leads → GHL-shape (so the rest of the page renders unchanged)
+      const normalized = (leads || []).map(l => ({
+        id:           l.id,                              // uuid
+        contactName:  l.name || l.ig_handle || '—',
+        email:        l.email || '',
+        phone:        l.phone || '',
+        country:      l.country || '',
+        dateAdded:    l.created_at,
+        source:       l.source || 'unknown',
+        // synthesize customFields for unchanged getField() usage downstream
+        roadblock:        l.roadblock || '',
+        would_invest:     l.would_invest || '',
+        bothered_score:   l.bothered_score,
+        age:              l.age,
+      }))
+
+      setContacts(normalized)
+
+      // Load call_logs keyed by lead_id (uuid)
+      const { data: logs } = await supabase.from('call_logs').select('*').not('lead_id', 'is', null)
       const logsMap = {}
-      logs?.forEach(log => { logsMap[log.ghl_contact_id] = log })
+      logs?.forEach(log => { logsMap[log.lead_id] = log })
       setCallLogs(logsMap)
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      console.error(err)
+    }
     setLoading(false)
   }
 
-  async function saveNote(contactId, notes) {
-    const existing = callLogs[contactId]
+  async function saveNote(leadId, notes) {
+    const existing = callLogs[leadId]
     const now = new Date().toISOString()
     if (existing) {
-      await supabase.from('call_logs').update({ notes, updated_at: now }).eq('ghl_contact_id', contactId)
+      await supabase.from('call_logs').update({ notes, updated_at: now }).eq('lead_id', leadId)
     } else {
-      await supabase.from('call_logs').insert({ ghl_contact_id: contactId, notes })
+      await supabase.from('call_logs').insert({ lead_id: leadId, notes })
     }
-    setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], notes } }))
+    setCallLogs(prev => ({ ...prev, [leadId]: { ...prev[leadId], lead_id: leadId, notes } }))
   }
 
-  async function updateTag(contactId, tag) {
-    const existing = callLogs[contactId]
+  async function updateTag(leadId, tag) {
+    const existing = callLogs[leadId]
     const now = new Date().toISOString()
     if (existing) {
-      await supabase.from('call_logs').update({ tag, last_contacted: now, updated_at: now }).eq('ghl_contact_id', contactId)
+      await supabase.from('call_logs').update({ tag, last_contacted: now, updated_at: now }).eq('lead_id', leadId)
     } else {
-      await supabase.from('call_logs').insert({ ghl_contact_id: contactId, tag, last_contacted: now })
+      await supabase.from('call_logs').insert({ lead_id: leadId, tag, last_contacted: now })
     }
-    setCallLogs(prev => ({ ...prev, [contactId]: { ...prev[contactId], tag, last_contacted: now } }))
-    handleTagChange(contactId, tag)
+    setCallLogs(prev => ({ ...prev, [leadId]: { ...prev[leadId], lead_id: leadId, tag, last_contacted: now } }))
+    // Pass leadId through to enrollment auto-enrollment hook
+    try {
+      await handleTagChange(leadId, tag)
+    } catch (err) {
+      console.error('handleTagChange error:', err)
+    }
+  }
+
+  async function deleteContact(contact) {
+    const leadId = contact.id
+    try {
+      // Manual cleanup of tables that don't have FK CASCADE to leads:
+      // messages.contact_id is text, campaign_enrollments.contact_id is text → both need manual delete
+      await supabase.from('messages').delete().eq('contact_id', leadId)
+      await supabase.from('campaign_enrollments').delete().eq('contact_id', leadId)
+      // call_logs CASCADE on lead_id → deleted automatically when lead is deleted
+      const { error } = await supabase.from('leads').delete().eq('id', leadId)
+      if (error) {
+        alert('Delete failed: ' + error.message)
+        return
+      }
+      // Update UI optimistically
+      setContacts(prev => prev.filter(c => c.id !== leadId))
+      setCallLogs(prev => {
+        const next = { ...prev }
+        delete next[leadId]
+        return next
+      })
+      if (selectedRow === leadId) setSelectedRow(null)
+      setDeleteTarget(null)
+    } catch (err) {
+      alert('Delete error: ' + String(err))
+    }
   }
 
   function saveListState(contactId) {
@@ -948,7 +1083,6 @@ export default function Calls() {
   }
 
   const tags = ['uncalled','called once','called twice','called three times','call back','not interested','booked']
-  const calledTags = ['called once','called twice','called three times','call back','not interested','booked']
   const answeredTags = ['call back','not interested','booked']
 
   const now = new Date()
@@ -957,7 +1091,7 @@ export default function Calls() {
     if (timeframe === 'daily')   { d.setHours(0,0,0,0); return d }
     if (timeframe === 'weekly')  { d.setDate(d.getDate() - 7); return d }
     if (timeframe === 'monthly') { d.setDate(d.getDate() - 30); return d }
-    return new Date(0)
+    return new Date(0) // 'all'
   }
   const startDate = getStartDate()
 
@@ -974,14 +1108,16 @@ export default function Calls() {
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
       const countryName = getCountryName(c.country)
-      const investAnswer = getField(c.customFields, FIELD_IDS.invest)
-      const botheredVal = getField(c.customFields, FIELD_IDS.bothered)
-      const ageVal = getField(c.customFields, FIELD_IDS.age)
+      const investAnswer = c.would_invest || '—'
+      const botheredVal  = c.bothered_score ?? '—'
+      const ageVal       = c.age ?? '—'
+      const sourceVal    = c.source || 'unknown'
       if (filters.country.length && !filters.country.includes(countryName)) return false
       if (filters.invest.length && !filters.invest.includes(investAnswer)) return false
       if (filters.tag.length && !filters.tag.includes(tag)) return false
       if (filters.bothered.length && !filters.bothered.includes(String(botheredVal))) return false
       if (filters.age.length && !filters.age.includes(String(ageVal))) return false
+      if (filters.source.length && !filters.source.includes(sourceVal)) return false
       if (filters.callWindow.length) {
         const color = getCallWindowColor(c.phone)
         if (!color || !filters.callWindow.includes(color)) return false
@@ -1018,6 +1154,7 @@ export default function Calls() {
   const TABLE_COLS = [
     { label: 'Name', w: '160px', filterKey: null },
     { label: 'Created', w: '160px', filterKey: null },
+    { label: 'Source', w: '100px', filterKey: 'source' },
     { label: 'Phone', w: '150px', filterKey: null },
     { label: 'Email', w: '200px', filterKey: null },
     { label: 'Biggest Struggle', w: '220px', filterKey: null },
@@ -1029,13 +1166,15 @@ export default function Calls() {
     { label: 'Last Contact', w: '110px', filterKey: null },
     { label: 'Notes', w: '190px', filterKey: null },
     { label: 'Tag', w: '170px', filterKey: 'tag' },
+    { label: '', w: '50px', filterKey: null },
   ]
 
   const filterOptions = {
     country: [...new Set(timeframeContacts.map(c => getCountryName(c.country)).filter(Boolean))].sort(),
-    invest: [...new Set(timeframeContacts.map(c => getField(c.customFields, FIELD_IDS.invest)).filter(v => v !== '—'))].sort(),
-    bothered: [...new Set(timeframeContacts.map(c => String(getField(c.customFields, FIELD_IDS.bothered))).filter(v => v !== '—'))].sort(),
-    age: [...new Set(timeframeContacts.map(c => String(getField(c.customFields, FIELD_IDS.age))).filter(v => v !== '—'))].sort(),
+    invest: [...new Set(timeframeContacts.map(c => c.would_invest).filter(v => v && v !== '—'))].sort(),
+    bothered: [...new Set(timeframeContacts.map(c => String(c.bothered_score ?? '—')).filter(v => v !== '—' && v !== 'null'))].sort(),
+    age: [...new Set(timeframeContacts.map(c => String(c.age ?? '—')).filter(v => v !== '—' && v !== 'null'))].sort(),
+    source: [...new Set(timeframeContacts.map(c => c.source).filter(Boolean))].sort(),
     tag: tags,
     callWindow: ['green', 'yellow', 'red'],
   }
@@ -1069,6 +1208,12 @@ export default function Calls() {
 
   return (
     <PageBackground style={{ minHeight: '100vh' }}>
+
+      <DeleteConfirmModal
+        contact={deleteTarget}
+        onConfirm={() => deleteTarget && deleteContact(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <PageHeader
         pageLabel="Outreach Pipeline"
@@ -1104,7 +1249,7 @@ export default function Calls() {
             border: `1px solid ${BRAND.border}`,
             width: isMobile ? '100%' : 'auto',
           }}>
-            {['daily','weekly','monthly'].map((t, i) => {
+            {['daily','weekly','monthly','all'].map((t, i) => {
               const active = timeframe === t
               return (
                 <button key={t} onClick={() => { setTimeframe(t); setPage(1) }}
@@ -1113,7 +1258,7 @@ export default function Calls() {
                     color: active ? '#000' : BRAND.textMuted,
                     border: 'none',
                     borderLeft: i > 0 ? `1px solid ${BRAND.border}` : 'none',
-                    padding: isMobile ? '8px 12px' : '6px 16px',
+                    padding: isMobile ? '8px 10px' : '6px 16px',
                     fontSize: 10, fontWeight: 700,
                     letterSpacing: '0.2em', textTransform: 'uppercase',
                     fontFamily: FONT_BODY,
@@ -1125,7 +1270,10 @@ export default function Calls() {
           </div>
           {!isMobile && (
             <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
-              Contacts Added {timeframe === 'daily' ? 'Today' : timeframe === 'weekly' ? 'This Week' : 'This Month'}
+              {timeframe === 'daily' ? 'Contacts Added Today'
+               : timeframe === 'weekly' ? 'Contacts Added This Week'
+               : timeframe === 'monthly' ? 'Contacts Added This Month'
+               : 'All Contacts'}
             </Eyebrow>
           )}
         </div>
@@ -1254,7 +1402,6 @@ export default function Calls() {
           <Eyebrow color={BRAND.textDim}>Loading contacts...</Eyebrow>
         ) : isMobile ? (
           <>
-            {/* Mobile contact card list */}
             {paginated.length === 0 ? (
               <div style={{
                 padding: 32, textAlign: 'center',
@@ -1279,10 +1426,7 @@ export default function Calls() {
                       tag={tag}
                       urgent={urgent}
                       onTagChange={updateTag}
-                      getField={getField}
-                      getCountryName={getCountryName}
-                      fieldIds={FIELD_IDS}
-                      callLogs={callLogs}
+                      onDelete={(c) => setDeleteTarget(c)}
                       router={router}
                     />
                   )
@@ -1300,7 +1444,7 @@ export default function Calls() {
               callWindowLabels={callWindowLabels}
             />
 
-            {/* Pagination */}
+            {/* Mobile pagination */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               marginTop: 16, gap: 12, flexWrap: 'wrap',
@@ -1362,9 +1506,9 @@ export default function Calls() {
           </>
         ) : (
           <>
-            {/* Table */}
+            {/* Desktop table */}
             <div style={{ overflow: 'auto', border: `1px solid ${BRAND.border}` }}>
-              <table style={{ minWidth: 1860, width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+              <table style={{ minWidth: 1920, width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: BRAND.bgCard, borderBottom: `1px solid ${BRAND.border}` }}>
                     {TABLE_COLS.map((h, idx) => {
@@ -1372,7 +1516,7 @@ export default function Calls() {
                       const isFilterable = !!h.filterKey
                       const isOpen = openFilter === h.filterKey
                       return (
-                        <th key={h.label}
+                        <th key={h.label + idx}
                           style={{
                             textAlign: 'left',
                             padding: '12px 14px',
@@ -1436,11 +1580,8 @@ export default function Calls() {
                   {paginated.map((contact, i) => {
                     const log = callLogs[contact.id]
                     const tag = log?.tag || 'uncalled'
-                    const cf = contact.customFields || []
                     const isSelected = selectedRow === contact.id
                     const baseRowBg = i % 2 === 0 ? BRAND.bgCard : BRAND.bgRaised
-                    // Selected: solid raised background tinted with gold flat, NOT translucent
-                    // (translucent caused the sticky name cell to bleed through over scroll)
                     const rowBg = isSelected ? '#1a160f' : baseRowBg
                     const urgent = needsCall(tag, log?.last_contacted)
                     return (
@@ -1492,18 +1633,17 @@ export default function Calls() {
                                 fontSize: 12,
                                 letterSpacing: '0.01em',
                               }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.borderBottomColor = urgent ? BRAND.gold : BRAND.textMuted
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.borderBottomColor = 'transparent'
-                              }}>
+                              onMouseEnter={e => { e.currentTarget.style.borderBottomColor = urgent ? BRAND.gold : BRAND.textMuted }}
+                              onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}>
                               {contact.contactName || '—'}
                             </Link>
                           </div>
                         </td>
                         <td style={{ padding: '10px 14px', fontSize: 10, color: BRAND.textMuted, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
                           {formatCreated(contact.dateAdded)}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontSize: 10, color: BRAND.textMuted, fontFamily: FONT_BODY, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                          {contact.source}
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1593,16 +1733,16 @@ export default function Calls() {
                           </div>
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
-                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{getField(cf, FIELD_IDS.struggle)}</span>
+                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{contact.roadblock || '—'}</span>
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'center', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600 }}>
-                          {getField(cf, FIELD_IDS.bothered)}
+                          {contact.bothered_score ?? '—'}
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
-                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{getField(cf, FIELD_IDS.invest)}</span>
+                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{contact.would_invest || '—'}</span>
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'center', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
-                          {getField(cf, FIELD_IDS.age)}
+                          {contact.age ?? '—'}
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
                           {getCountryName(contact.country)}
@@ -1632,6 +1772,22 @@ export default function Calls() {
                             ))}
                           </select>
                         </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setDeleteTarget(contact) }}
+                            title="Delete contact"
+                            style={{
+                              color: BRAND.textDim,
+                              background: 'transparent',
+                              border: `1px solid ${BRAND.border}`,
+                              padding: '3px 8px', fontSize: 11, cursor: 'pointer',
+                              fontFamily: FONT_BODY,
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = BRAND.statusDisqualified; e.currentTarget.style.borderColor = BRAND.statusDisqualified }}
+                            onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
+                            ✕
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -1639,7 +1795,7 @@ export default function Calls() {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* Desktop pagination */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>Rows Per Page</Eyebrow>
@@ -1696,7 +1852,6 @@ export default function Calls() {
               </div>
             </div>
 
-            {/* Legend (desktop only) */}
             {!isMobile && (
               <div style={{
                 display: 'flex',
