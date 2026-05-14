@@ -62,7 +62,14 @@ export async function POST(req) {
   // We pass leadId via v:leadId variable in send-email
   const leadId = data['user-variables']?.leadId || null
 
-  console.log('[mailgun-webhook]', event, { recipient, leadId, messageId })
+  console.log('[mailgun-webhook]', event, {
+  recipient,
+  leadId,
+  messageId,
+  rawMessageId: data.message?.headers?.['message-id'],
+  storage_message_id: data.message?.storage?.key,
+  id: data.id,
+})
 
   // ── Update leads suppression flags ─────────────────────────────────
   if (leadId) {
