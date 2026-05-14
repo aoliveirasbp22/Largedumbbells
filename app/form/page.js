@@ -1,15 +1,13 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground,
-  CornerBracket, BracketFrame, BrandButton,
+  CornerBracket, BrandButton,
   useIsMobile,
 } from '@/lib/brand'
 
-const STORAGE_KEY = 'ldFormProgress'
-
-// ─── Country list (alphabetical) ────────────────────────────────────────
+// ─── Country list ───────────────────────────────────────────────────────
 const COUNTRIES = [
   'United States','Canada','United Kingdom','Australia','New Zealand','Ireland',
   'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda',
@@ -41,152 +39,110 @@ const COUNTRIES = [
   'Uzbekistan','Vanuatu','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe',
 ]
 
-// ─── Steps ──────────────────────────────────────────────────────────────
-const STEPS = [
-  { key: 'first_name',     label: 'Your First Name',                           type: 'text',    placeholder: 'First name',  eyebrow: 'Step 1 of 9' },
-  { key: 'last_name',      label: 'Your Last Name',                            type: 'text',    placeholder: 'Last name',   eyebrow: 'Step 2 of 9' },
-  { key: 'email',          label: 'Email Address',                             type: 'email',   placeholder: 'you@email.com',eyebrow: 'Step 3 of 9' },
-  { key: 'phone',          label: 'Phone Number',                              type: 'tel',     placeholder: '+1 555 000 0000', eyebrow: 'Step 4 of 9' },
-  { key: 'age',            label: 'How Old Are You',                           type: 'number',  placeholder: 'Age in years', eyebrow: 'Step 5 of 9' },
-  { key: 'struggle',       label: 'What Has Been Your Biggest Struggle With Fitness', type: 'textarea', placeholder: 'Type your answer…', eyebrow: 'Step 6 of 9' },
-  { key: 'bothered_score', label: 'How Much Are You Bothered By How You Look and Feel',type: 'scale',    eyebrow: 'Step 7 of 9' },
-  { key: 'occupation',     label: 'What Do You Do For Work',                   type: 'text',    placeholder: 'Your occupation', eyebrow: 'Step 8 of 9' },
-  { key: 'country',        label: 'Where Are You Based',                       type: 'country', eyebrow: 'Step 9 of 9' },
-]
-
-// ─── Validation per step ────────────────────────────────────────────────
-function validateStep(stepKey, value) {
-  if (value === undefined || value === null || String(value).trim() === '') {
-    return 'This field is required'
-  }
-  if (stepKey === 'email') {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Please enter a valid email'
-  }
-  if (stepKey === 'phone') {
-    const digits = String(value).replace(/\D/g, '')
-    if (digits.length < 7) return 'Please enter a valid phone number'
-  }
-  if (stepKey === 'age') {
-    const n = parseInt(value, 10)
-    if (Number.isNaN(n) || n < 13 || n > 100) return 'Please enter an age between 13 and 100'
-  }
-  if (stepKey === 'bothered_score') {
-    const n = parseInt(value, 10)
-    if (Number.isNaN(n) || n < 1 || n > 5) return 'Please select a number'
-  }
-  return null
+const INITIAL = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  age: '',
+  struggle: '',
+  bothered_score: '',
+  occupation: '',
+  country: '',
 }
 
-// ─── Main page ──────────────────────────────────────────────────────────
+function validate(v) {
+  const errors = {}
+  if (!v.first_name.trim())   errors.first_name = 'Required'
+  if (!v.last_name.trim())    errors.last_name  = 'Required'
+  if (!v.email.trim())        errors.email      = 'Required'
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) errors.email = 'Enter a valid email'
+  if (!v.phone.trim())        errors.phone      = 'Required'
+  else if (String(v.phone).replace(/\D/g,'').length < 7) errors.phone = 'Enter a valid phone'
+  if (!v.age)                 errors.age        = 'Required'
+  else {
+    const n = parseInt(v.age, 10)
+    if (Number.isNaN(n) || n < 13 || n > 100) errors.age = 'Must be 13–100'
+  }
+  if (!v.struggle.trim())     errors.struggle   = 'Required'
+  if (!v.bothered_score)      errors.bothered_score = 'Select a number'
+  if (!v.occupation.trim())   errors.occupation = 'Required'
+  if (!v.country)             errors.country    = 'Required'
+  return errors
+}
+
 export default function FormPage() {
   const isMobile = useIsMobile()
 
-  const [stepIdx, setStepIdx]    = useState(0)
-  const [values, setValues]      = useState({})
-  const [website, setWebsite]    = useState('')   // honeypot
-  const [error, setError]        = useState('')
+  const [values, setValues]         = useState(INITIAL)
+  const [errors, setErrors]         = useState({})
+  const [website, setWebsite]       = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone]          = useState(false)
-  const [hydrated, setHydrated]  = useState(false)
+  const [done, setDone]             = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const isFinal = stepIdx === STEPS.length - 1
-  const step    = STEPS[stepIdx]
-
-  // ── Hydrate from localStorage once ─────────────────────────────────────
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-      if (saved && saved.values) {
-        setValues(saved.values)
-        if (typeof saved.stepIdx === 'number' && saved.stepIdx < STEPS.length) {
-          setStepIdx(saved.stepIdx)
-        }
-      }
-    } catch {}
-    setHydrated(true)
-  }, [])
-
-  // ── Save progress on every change ──────────────────────────────────────
-  useEffect(() => {
-    if (!hydrated) return
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ stepIdx, values }))
-    } catch {}
-  }, [hydrated, stepIdx, values])
-
-  // ── Step navigation ────────────────────────────────────────────────────
-  function setValue(key, v) {
+  function setField(key, v) {
     setValues(prev => ({ ...prev, [key]: v }))
-    setError('')
+    if (errors[key]) setErrors(prev => { const next = { ...prev }; delete next[key]; return next })
   }
 
-  function next() {
-    const val = values[step.key]
-    const err = validateStep(step.key, val)
-    if (err) { setError(err); return }
-    setError('')
-    if (isFinal) submit()
-    else setStepIdx(i => i + 1)
-  }
-
-  function back() {
-    setError('')
-    setStepIdx(i => Math.max(0, i - 1))
-  }
-
-  async function submit() {
+  async function onSubmit() {
     if (submitting) return
+    const errs = validate(values)
+    setErrors(errs)
+    if (Object.keys(errs).length > 0) {
+      const firstKey = Object.keys(errs)[0]
+      setTimeout(() => {
+        const el = document.querySelector(`[data-field="${firstKey}"]`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+      return
+    }
     setSubmitting(true)
-    setError('')
-
+    setSubmitError('')
     try {
       const res = await fetch('/api/form-submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, website }),  // include honeypot
+        body: JSON.stringify({ ...values, website }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        setError(data?.reason === 'rate_limited'
-          ? 'Too many submissions. Please try again in an hour.'
-          : 'Something went wrong. Please try again.')
+        setSubmitError(
+          data?.reason === 'rate_limited'
+            ? 'Too many submissions. Please try again in an hour.'
+            : 'Something went wrong. Please try again.'
+        )
         setSubmitting(false)
         return
       }
-      // Wipe localStorage on success
-      try { localStorage.removeItem(STORAGE_KEY) } catch {}
       setDone(true)
     } catch {
-      setError('Network error. Please try again.')
+      setSubmitError('Network error. Please try again.')
       setSubmitting(false)
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
   if (done) return <ThankYou isMobile={isMobile} />
 
-  const progressPct = ((stepIdx + 1) / STEPS.length) * 100
-
   return (
-    <PageBackground style={{
-      minHeight: '100vh',
-      display: 'flex', flexDirection: 'column',
-    }}>
-
-      {/* Top bar — logo + progress */}
+    <PageBackground style={{ minHeight: '100vh' }}>
+      {/* Header */}
       <div style={{
-        padding: isMobile ? '18px 16px 14px' : '24px 32px 18px',
+        padding: isMobile ? '20px 16px 16px' : '32px 32px 24px',
         borderBottom: `1px solid ${BRAND.border}`,
-        background: BRAND.bg,
       }}>
         <div style={{
-          maxWidth: 760, margin: '0 auto',
+          maxWidth: 640, margin: '0 auto',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
           <img
             src="/logo-large-dumbbells.png"
             alt=""
-            style={{ width: 36, height: 36, opacity: 0.95, flexShrink: 0 }}
+            style={{
+              width: isMobile ? 40 : 48, height: isMobile ? 40 : 48,
+              opacity: 0.95, flexShrink: 0,
+            }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Eyebrow style={{ fontSize: 9, letterSpacing: '0.35em', marginBottom: 4 }}>
@@ -194,79 +150,156 @@ export default function FormPage() {
             </Eyebrow>
             <p style={{
               fontFamily: FONT_BODY,
-              fontSize: 10, fontWeight: 600,
+              fontSize: 10, fontWeight: 700,
               color: BRAND.textDim,
-              letterSpacing: '0.2em',
+              letterSpacing: '0.25em',
               textTransform: 'uppercase',
               margin: 0,
             }}>The Busy Body Blueprint</p>
           </div>
         </div>
-
-        {/* Progress bar */}
-        <div style={{
-          maxWidth: 760, margin: '14px auto 0',
-          height: 2,
-          background: BRAND.border,
-          position: 'relative',
-        }}>
-          <div style={{
-            position: 'absolute', top: 0, left: 0, bottom: 0,
-            width: `${progressPct}%`,
-            background: BRAND.gold,
-            boxShadow: `0 0 12px ${BRAND.goldGlow}`,
-            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-          }} />
-        </div>
       </div>
 
-      {/* Step body */}
+      {/* Body */}
       <div style={{
-        flex: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: isMobile ? '32px 16px 100px' : '60px 32px 100px',
+        padding: isMobile ? '24px 16px 120px' : '40px 32px 120px',
       }}>
-        <div style={{
-          width: '100%', maxWidth: 640,
-          position: 'relative',
-        }}>
-          <Eyebrow color={BRAND.textMuted} style={{
-            fontSize: 10, letterSpacing: '0.35em', marginBottom: 14,
-          }}>
-            {step.eyebrow}
-          </Eyebrow>
+        <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
-          <DisplayHeading
-            size={isMobile ? 28 : 38}
-            style={{ marginBottom: 14, lineHeight: 1.15 }}>
-            {step.label}
-          </DisplayHeading>
-
-          <GoldRule width={40} />
-
-          <div style={{ marginTop: 28 }}>
-            <StepInput
-              step={step}
-              value={values[step.key] ?? ''}
-              onChange={v => setValue(step.key, v)}
-              onEnter={next}
-              isMobile={isMobile}
-            />
-
-            {error && (
-              <p style={{
-                marginTop: 14,
-                fontFamily: FONT_BODY,
-                fontSize: 11, fontWeight: 600,
-                color: BRAND.statusDisqualified,
-                letterSpacing: '0.15em', textTransform: 'uppercase',
-              }}>
-                {error}
-              </p>
-            )}
+          {/* Intro */}
+          <div style={{ marginBottom: isMobile ? 28 : 36 }}>
+            <Eyebrow color={BRAND.textMuted} style={{
+              fontSize: 10, letterSpacing: '0.35em', marginBottom: 10,
+            }}>
+              Get The Blueprint
+            </Eyebrow>
+            <DisplayHeading size={isMobile ? 28 : 36} style={{ marginBottom: 14, lineHeight: 1.15 }}>
+              Tell Us About You
+            </DisplayHeading>
+            <GoldRule width={40} />
+            <p style={{
+              marginTop: 18,
+              fontFamily: FONT_BODY,
+              fontSize: 13, lineHeight: 1.6,
+              color: BRAND.textSecondary,
+              letterSpacing: '0.01em',
+            }}>
+              Fill out the form below to receive your Busy Body Blueprint.
+            </p>
           </div>
 
-          {/* Honeypot — visually hidden, only bots fill it */}
+          {/* Fields */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 18 : 22 }}>
+
+            <Field dataField="first_name" label="First Name" error={errors.first_name}>
+              <TextInput
+                value={values.first_name}
+                onChange={v => setField('first_name', v)}
+                placeholder="First name"
+                autoComplete="given-name"
+                hasError={!!errors.first_name}
+              />
+            </Field>
+
+            <Field dataField="last_name" label="Last Name" error={errors.last_name}>
+              <TextInput
+                value={values.last_name}
+                onChange={v => setField('last_name', v)}
+                placeholder="Last name"
+                autoComplete="family-name"
+                hasError={!!errors.last_name}
+              />
+            </Field>
+
+            <Field dataField="email" label="Email" error={errors.email}>
+              <TextInput
+                type="email"
+                value={values.email}
+                onChange={v => setField('email', v)}
+                placeholder="you@email.com"
+                inputMode="email"
+                autoComplete="email"
+                hasError={!!errors.email}
+              />
+            </Field>
+
+            <Field dataField="phone" label="Phone Number" error={errors.phone}>
+              <TextInput
+                type="tel"
+                value={values.phone}
+                onChange={v => setField('phone', v)}
+                placeholder="+1 555 000 0000"
+                inputMode="tel"
+                autoComplete="tel"
+                hasError={!!errors.phone}
+              />
+            </Field>
+
+            <Field dataField="age" label="Age" error={errors.age}>
+              <TextInput
+                type="number"
+                value={values.age}
+                onChange={v => setField('age', v)}
+                placeholder="Years"
+                inputMode="numeric"
+                hasError={!!errors.age}
+              />
+            </Field>
+
+            <Field
+              dataField="struggle"
+              label="What has been your biggest struggle with fitness"
+              error={errors.struggle}>
+              <Textarea
+                value={values.struggle}
+                onChange={v => setField('struggle', v)}
+                placeholder="Type your answer…"
+                hasError={!!errors.struggle}
+              />
+            </Field>
+
+            <Field
+              dataField="bothered_score"
+              label="How much are you bothered by how you look and feel"
+              sublabel="1 = not at all · 5 = constantly"
+              error={errors.bothered_score}>
+              <ScalePicker
+                value={parseInt(values.bothered_score, 10) || null}
+                onChange={n => setField('bothered_score', n)}
+                isMobile={isMobile}
+              />
+            </Field>
+
+            <Field
+              dataField="occupation"
+              label="What do you do for work"
+              error={errors.occupation}>
+              <TextInput
+                value={values.occupation}
+                onChange={v => setField('occupation', v)}
+                placeholder="Your occupation"
+                hasError={!!errors.occupation}
+              />
+            </Field>
+
+            <Field dataField="country" label="Country" error={errors.country}>
+              <SelectInput
+                value={values.country}
+                onChange={v => setField('country', v)}
+                hasError={!!errors.country}>
+                <option value="" disabled style={{ background: BRAND.bgCard }}>
+                  Choose your country
+                </option>
+                {COUNTRIES.map(c => (
+                  <option key={c} value={c} style={{ background: BRAND.bgCard, color: BRAND.textPrimary }}>
+                    {c}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+
+          {/* Honeypot */}
           <input
             type="text"
             name="website"
@@ -284,39 +317,36 @@ export default function FormPage() {
               pointerEvents: 'none',
             }}
           />
+
+          {submitError && (
+            <p style={{
+              marginTop: 18,
+              fontFamily: FONT_BODY,
+              fontSize: 11, fontWeight: 600,
+              color: BRAND.statusDisqualified,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+            }}>
+              {submitError}
+            </p>
+          )}
+
         </div>
       </div>
 
-      {/* Sticky footer with Back / Next */}
+      {/* Sticky submit */}
       <div style={{
         position: 'sticky', bottom: 0,
-        background: BRAND.bg,
-        borderTop: `1px solid ${BRAND.border}`,
-        padding: isMobile ? '14px 16px' : '18px 32px',
+        background: `linear-gradient(to top, ${BRAND.bg} 70%, transparent)`,
+        padding: isMobile ? '16px 16px calc(16px + env(safe-area-inset-bottom))' : '20px 32px',
         zIndex: 10,
       }}>
-        <div style={{
-          maxWidth: 640, margin: '0 auto',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
-          {stepIdx > 0 ? (
-            <BrandButton
-              variant="ghost" size="md"
-              onClick={back}
-              disabled={submitting}>
-              ← Back
-            </BrandButton>
-          ) : (
-            <div style={{ flex: 1 }} />
-          )}
-
-          <div style={{ flex: 1 }} />
-
+        <div style={{ maxWidth: 640, margin: '0 auto' }}>
           <BrandButton
             variant="solid" size="md"
-            onClick={next}
-            disabled={submitting}>
-            {submitting ? 'Sending…' : isFinal ? 'Get the Blueprint →' : 'Continue →'}
+            onClick={onSubmit}
+            disabled={submitting}
+            style={{ width: '100%' }}>
+            {submitting ? 'Sending…' : 'Get the Blueprint →'}
           </BrandButton>
         </div>
       </div>
@@ -324,206 +354,169 @@ export default function FormPage() {
   )
 }
 
-// ─── The right input per step type ──────────────────────────────────────
-function StepInput({ step, value, onChange, onEnter, isMobile }) {
-  const ref = useRef(null)
+// ─── Field wrapper ──────────────────────────────────────────────────────
+function Field({ label, sublabel, error, children, dataField }) {
+  return (
+    <div data-field={dataField}>
+      <Eyebrow color={BRAND.textSecondary} style={{
+        fontSize: 9, letterSpacing: '0.25em', marginBottom: 8,
+      }}>
+        {label}
+      </Eyebrow>
+      {sublabel && (
+        <p style={{
+          fontFamily: FONT_BODY, fontSize: 10,
+          color: BRAND.textDim,
+          letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+          marginTop: -4, marginBottom: 10,
+        }}>
+          {sublabel}
+        </p>
+      )}
+      {children}
+      {error && (
+        <p style={{
+          marginTop: 6,
+          fontFamily: FONT_BODY,
+          fontSize: 10, fontWeight: 700,
+          color: BRAND.statusDisqualified,
+          letterSpacing: '0.15em', textTransform: 'uppercase',
+        }}>
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
 
-  // Auto-focus on step change (desktop only — mobile would force keyboard up)
-  useEffect(() => {
-    if (!isMobile && ref.current && step.type !== 'scale' && step.type !== 'country') {
-      ref.current.focus()
-    }
-  }, [step.key, isMobile, step.type])
-
-  function onKeyDown(e) {
-    if (e.key === 'Enter' && step.type !== 'textarea') {
-      e.preventDefault()
-      onEnter()
-    }
-  }
-
-  const inputBase = {
+function baseInputStyle(hasError) {
+  return {
     width: '100%',
     background: BRAND.bgCard,
     color: BRAND.textPrimary,
-    border: `1px solid ${BRAND.border}`,
+    border: `1px solid ${hasError ? BRAND.statusDisqualified : BRAND.border}`,
     padding: '14px 16px',
-    fontSize: 16,           // 16px = no iOS auto-zoom
+    minHeight: 48,
+    fontSize: 16,
     fontFamily: FONT_BODY,
     letterSpacing: '0.01em',
     outline: 'none',
+    boxSizing: 'border-box',
     transition: 'border-color 0.15s, background 0.15s',
   }
+}
 
-  function handleFocus(e) {
-    e.target.style.borderColor = BRAND.borderGoldStrong
-    e.target.style.background  = BRAND.bgRaised
+function makeFocusHandlers(hasError) {
+  return {
+    onFocus: e => {
+      if (!hasError) e.target.style.borderColor = BRAND.borderGoldStrong
+      e.target.style.background = BRAND.bgRaised
+    },
+    onBlur: e => {
+      if (!hasError) e.target.style.borderColor = BRAND.border
+      e.target.style.background = BRAND.bgCard
+    },
   }
-  function handleBlur(e) {
-    e.target.style.borderColor = BRAND.border
-    e.target.style.background  = BRAND.bgCard
-  }
+}
 
-  // ── 1-5 scale picker ──────────────────────────────────────────────────
-  if (step.type === 'scale') {
-    return (
-      <div>
-        <div style={{
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: 10,
-        }}>
-          {[1, 2, 3, 4, 5].map(n => {
-            const active = parseInt(value, 10) === n
-            return (
-              <button
-                key={n}
-                onClick={() => onChange(n)}
-                style={{
-                  flex: 1,
-                  position: 'relative',
-                  background: active ? 'rgba(176, 131, 74, 0.13)' : BRAND.bgCard,
-                  color: active ? BRAND.gold : BRAND.textPrimary,
-                  border: `1px solid ${active ? BRAND.borderGoldStrong : BRAND.border}`,
-                  padding: isMobile ? '14px 16px' : '20px 8px',
-                  fontFamily: FONT_DISPLAY,
-                  fontSize: isMobile ? 18 : 24,
-                  fontWeight: 400,
-                  letterSpacing: '0.05em',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  textShadow: active ? `0 0 12px ${BRAND.goldGlow}` : 'none',
-                  display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', gap: 12,
-                }}
-                onMouseEnter={e => {
-                  if (!active) {
-                    e.currentTarget.style.borderColor = BRAND.borderGold
-                    e.currentTarget.style.background  = BRAND.bgRaised
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!active) {
-                    e.currentTarget.style.borderColor = BRAND.border
-                    e.currentTarget.style.background  = BRAND.bgCard
-                  }
-                }}>
-                {active && <CornerBracket position="tl" size={8} />}
-                {active && <CornerBracket position="tr" size={8} />}
-                {active && <CornerBracket position="bl" size={8} />}
-                {active && <CornerBracket position="br" size={8} />}
-                <span style={{ position: 'relative' }}>
-                  {n}
-                </span>
-                {isMobile && (
-                  <span style={{
-                    fontSize: 9,
-                    letterSpacing: '0.25em', textTransform: 'uppercase', fontWeight: 700,
-                    fontFamily: FONT_BODY,
-                    color: active ? BRAND.gold : BRAND.textDim,
-                    opacity: 0.85,
-                  }}>
-                    {n === 1 ? 'Not At All' : n === 5 ? 'Constantly' : ''}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-        {!isMobile && (
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            marginTop: 14,
-          }}>
-            <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
-              Not At All
-            </Eyebrow>
-            <Eyebrow color={BRAND.textDim} style={{ fontSize: 9, letterSpacing: '0.2em' }}>
-              Constantly
-            </Eyebrow>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Country dropdown ──────────────────────────────────────────────────
-  if (step.type === 'country') {
-    return (
-      <select
-        ref={ref}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        style={{
-          ...inputBase,
-          cursor: 'pointer',
-          appearance: 'none',
-          WebkitAppearance: 'none',
-          backgroundImage:
-            `linear-gradient(45deg, transparent 50%, ${BRAND.textMuted} 50%),
-             linear-gradient(135deg, ${BRAND.textMuted} 50%, transparent 50%)`,
-          backgroundPosition:
-            `calc(100% - 22px) 50%,
-             calc(100% - 16px) 50%`,
-          backgroundSize: '6px 6px',
-          backgroundRepeat: 'no-repeat',
-          paddingRight: 40,
-        }}>
-        <option value="" disabled style={{ background: BRAND.bgCard }}>
-          Choose your country
-        </option>
-        {COUNTRIES.map(c => (
-          <option key={c} value={c} style={{ background: BRAND.bgCard, color: BRAND.textPrimary }}>
-            {c}
-          </option>
-        ))}
-      </select>
-    )
-  }
-
-  // ── Textarea (struggle question) ──────────────────────────────────────
-  if (step.type === 'textarea') {
-    return (
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={step.placeholder}
-        rows={5}
-        style={{ ...inputBase, resize: 'vertical', minHeight: 120, lineHeight: 1.5 }}
-      />
-    )
-  }
-
-  // ── Standard text/email/phone/number ──────────────────────────────────
+function TextInput({ value, onChange, type = 'text', placeholder, inputMode, autoComplete, hasError }) {
   return (
     <input
-      ref={ref}
-      type={step.type}
-      inputMode={step.type === 'number' ? 'numeric' : step.type === 'tel' ? 'tel' : step.type === 'email' ? 'email' : 'text'}
-      autoComplete={
-        step.key === 'first_name' ? 'given-name' :
-        step.key === 'last_name'  ? 'family-name' :
-        step.key === 'email'      ? 'email' :
-        step.key === 'phone'      ? 'tel' :
-        'off'
-      }
+      type={type}
+      inputMode={inputMode}
+      autoComplete={autoComplete || 'off'}
       value={value}
       onChange={e => onChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      placeholder={step.placeholder}
-      style={inputBase}
+      placeholder={placeholder}
+      style={baseInputStyle(hasError)}
+      {...makeFocusHandlers(hasError)}
     />
   )
 }
 
-// ─── Thank You screen ───────────────────────────────────────────────────
+function Textarea({ value, onChange, placeholder, hasError }) {
+  return (
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={4}
+      style={{
+        ...baseInputStyle(hasError),
+        resize: 'vertical',
+        minHeight: 100,
+        lineHeight: 1.5,
+      }}
+      {...makeFocusHandlers(hasError)}
+    />
+  )
+}
+
+function SelectInput({ value, onChange, children, hasError }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        ...baseInputStyle(hasError),
+        cursor: 'pointer',
+        appearance: 'none',
+        WebkitAppearance: 'none',
+        backgroundImage:
+          `linear-gradient(45deg, transparent 50%, ${BRAND.textMuted} 50%),
+           linear-gradient(135deg, ${BRAND.textMuted} 50%, transparent 50%)`,
+        backgroundPosition:
+          `calc(100% - 22px) 50%, calc(100% - 16px) 50%`,
+        backgroundSize: '6px 6px',
+        backgroundRepeat: 'no-repeat',
+        paddingRight: 40,
+      }}
+      {...makeFocusHandlers(hasError)}>
+      {children}
+    </select>
+  )
+}
+
+function ScalePicker({ value, onChange, isMobile }) {
+  return (
+    <div style={{
+      display: 'flex',
+      gap: isMobile ? 6 : 10,
+    }}>
+      {[1, 2, 3, 4, 5].map(n => {
+        const active = value === n
+        return (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            style={{
+              flex: 1,
+              position: 'relative',
+              background: active ? 'rgba(176, 131, 74, 0.13)' : BRAND.bgCard,
+              color: active ? BRAND.gold : BRAND.textPrimary,
+              border: `1px solid ${active ? BRAND.borderGoldStrong : BRAND.border}`,
+              padding: isMobile ? '14px 0' : '18px 0',
+              minHeight: 48,
+              fontFamily: FONT_DISPLAY,
+              fontSize: isMobile ? 18 : 22, fontWeight: 400,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              textShadow: active ? `0 0 12px ${BRAND.goldGlow}` : 'none',
+            }}>
+            {active && <CornerBracket position="tl" size={7} />}
+            {active && <CornerBracket position="tr" size={7} />}
+            {active && <CornerBracket position="bl" size={7} />}
+            {active && <CornerBracket position="br" size={7} />}
+            {n}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function ThankYou({ isMobile }) {
   return (
     <PageBackground style={{
