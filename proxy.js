@@ -10,6 +10,8 @@ const PUBLIC_PATHS = [
   '/api/auth',              // Login endpoint — must be reachable without cookie
   '/api/webhook',           // Meta webhook — must stay public
   '/api/ghl-webhook',       // GHL webhook (if used) — must stay public
+  '/api/form-submit',       // Public form submission endpoint
+  '/form',                  // Public branded form page
   '/privacy',               // Required public by Meta for app review
   '/terms',                 // Required public by Meta for app review
 ]
