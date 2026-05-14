@@ -1026,14 +1026,12 @@ export default function Calls() {
   }
 
   async function deleteContact(contact) {
-    const leadId = contact.id
-    try {
-      // Manual cleanup of tables that don't have FK CASCADE to leads:
-      // messages.contact_id is text, campaign_enrollments.contact_id is text → both need manual delete
-      await supabase.from('messages').delete().eq('contact_id', leadId)
-      await supabase.from('campaign_enrollments').delete().eq('contact_id', leadId)
-      // call_logs CASCADE on lead_id → deleted automatically when lead is deleted
-      const { error } = await supabase.from('leads').delete().eq('id', leadId)
+  const leadId = contact.id
+  try {
+    // campaign_enrollments.contact_id is TEXT (no FK), needs manual delete.
+    // messages.lead_id and call_logs.lead_id both CASCADE → handled automatically.
+    await supabase.from('campaign_enrollments').delete().eq('contact_id', leadId)
+    const { error } = await supabase.from('leads').delete().eq('id', leadId)
       if (error) {
         alert('Delete failed: ' + error.message)
         return
