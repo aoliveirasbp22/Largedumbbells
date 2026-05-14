@@ -8,17 +8,6 @@
 //   MAILGUN_API_KEY    — sending key from Mailgun > Domain Settings > Sending keys
 //   MAILGUN_DOMAIN     — the verified sending domain (e.g. largedumbbells.com)
 //   MAILGUN_REGION     — 'US' (default) or 'EU'
-//
-// Body (JSON):
-//   to        : string — recipient email
-//   subject   : string
-//   text      : string — plain text body (recommended for now)
-//   html      : string — optional HTML body
-//   leadId    : uuid   — optional, for logging to messages table
-//   fromName  : string — optional, defaults to "Large Dumbbells"
-//   replyTo   : string — optional reply-to
-//
-// Returns 200 with { ok: true, mailgunId } on success.
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
@@ -32,7 +21,7 @@ const MAILGUN_BASE = MAILGUN_REGION === 'EU'
   : 'https://api.mailgun.net/v3'
 
 const DEFAULT_FROM_NAME = 'Large Dumbbells'
-const DEFAULT_FROM_USER = 'hello' // results in hello@largedumbbells.com
+const DEFAULT_FROM_USER = 'hello'
 
 export async function POST(req) {
   if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
@@ -46,7 +35,6 @@ export async function POST(req) {
 
   const { to, subject, text, html, leadId, fromName, replyTo } = body || {}
 
-  // ── Basic validation ──────────────────────────────────────────────────
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     return NextResponse.json({ ok: false, reason: 'invalid_to' }, { status: 400 })
   }
@@ -57,7 +45,6 @@ export async function POST(req) {
     return NextResponse.json({ ok: false, reason: 'missing_body' }, { status: 400 })
   }
 
-  // ── Suppression check: don't email someone who unsubscribed or bounced ─
   if (leadId) {
     const { data: lead } = await supabase
       .from('leads')
@@ -65,18 +52,11 @@ export async function POST(req) {
       .eq('id', leadId)
       .maybeSingle()
 
-    if (lead?.unsubscribed) {
-      return NextResponse.json({ ok: false, reason: 'unsubscribed' }, { status: 409 })
-    }
-    if (lead?.bounced) {
-      return NextResponse.json({ ok: false, reason: 'bounced' }, { status: 409 })
-    }
-    if (lead?.complained) {
-      return NextResponse.json({ ok: false, reason: 'complained' }, { status: 409 })
-    }
+    if (lead?.unsubscribed) return NextResponse.json({ ok: false, reason: 'unsubscribed' }, { status: 409 })
+    if (lead?.bounced)      return NextResponse.json({ ok: false, reason: 'bounced' }, { status: 409 })
+    if (lead?.complained)   return NextResponse.json({ ok: false, reason: 'complained' }, { status: 409 })
   }
 
-  // ── Build Mailgun request ──────────────────────────────────────────────
   const form = new URLSearchParams()
   form.append('from', `${fromName || DEFAULT_FROM_NAME} <${DEFAULT_FROM_USER}@${MAILGUN_DOMAIN}>`)
   form.append('to', to)
@@ -84,17 +64,15 @@ export async function POST(req) {
   if (text) form.append('text', text)
   if (html) form.append('html', html)
   if (replyTo) form.append('h:Reply-To', replyTo)
-
-  // Tag the message so we can correlate webhook events later
   if (leadId) form.append('v:leadId', leadId)
   form.append('o:tag', 'crm')
 
-  // ── Send via Mailgun ───────────────────────────────────────────────────
   const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64')
+  const url = `${MAILGUN_BASE}/${MAILGUN_DOMAIN}/messages`
 
-  let mgRes, mgData
+  let mgRes, mgRaw, mgData
   try {
-    mgRes = await fetch(`${MAILGUN_BASE}/${MAILGUN_DOMAIN}/messages`, {
+    mgRes = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -102,35 +80,56 @@ export async function POST(req) {
       },
       body: form.toString(),
     })
-    mgData = await mgRes.json().catch(() => ({}))
+    mgRaw = await mgRes.text()
+    try { mgData = JSON.parse(mgRaw) } catch { mgData = null }
   } catch (err) {
     console.error('[send-email] fetch failed:', err)
-    return NextResponse.json({ ok: false, reason: 'network' }, { status: 502 })
+    return NextResponse.json({ ok: false, reason: 'network', error: String(err) }, { status: 502 })
   }
 
   if (!mgRes.ok) {
-    console.error('[send-email] mailgun rejected:', mgRes.status, mgData)
+    console.error('[send-email] mailgun rejected:', {
+      status: mgRes.status,
+      raw: mgRaw,
+      url,
+      domain: MAILGUN_DOMAIN,
+      region: MAILGUN_REGION,
+      keyLength: MAILGUN_API_KEY.length,
+      keyPrefix: MAILGUN_API_KEY.slice(0, 6),
+    })
     return NextResponse.json(
-      { ok: false, reason: 'mailgun_error', status: mgRes.status, detail: mgData },
+      {
+        ok: false,
+        reason: 'mailgun_error',
+        status: mgRes.status,
+        raw: mgRaw,           // ← now we see Mailgun's actual message
+        detail: mgData,
+        debug: {
+          url,
+          domain: MAILGUN_DOMAIN,
+          region: MAILGUN_REGION,
+          keyLength: MAILGUN_API_KEY.length,
+          keyPrefix: MAILGUN_API_KEY.slice(0, 6),
+        }
+      },
       { status: 502 }
     )
   }
 
-  // ── Log to messages table ──────────────────────────────────────────────
   if (leadId) {
     const { error: logErr } = await supabase.from('messages').insert({
-      lead_id:   leadId,
+      lead_id: leadId,
       direction: 'outbound',
-      channel:   'email',
-      content:   subject + '\n\n' + (text || html),
-      external_id: mgData.id || null,
+      channel: 'email',
+      content: subject + '\n\n' + (text || html),
+      external_id: mgData?.id || null,
     })
     if (logErr) console.error('[send-email] message log error:', logErr)
   }
 
   return NextResponse.json({
     ok: true,
-    mailgunId: mgData.id,
-    message: mgData.message,
+    mailgunId: mgData?.id,
+    message: mgData?.message,
   })
 }
