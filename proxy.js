@@ -20,13 +20,19 @@ const PUBLIC_PATHS = [
 ]
 
 const PUBLIC_PREFIXES = [
-  '/_next',                 // Next.js static assets
+  '/_next',
   '/favicon',
-  '/logo-large-dumbbells',  // Logo file
+  '/logo-large-dumbbells',
 ]
 
 export function proxy(req) {
   const { pathname } = req.nextUrl
+
+  // Server-to-server internal calls bypass the gate
+  const internalSecret = req.headers.get('x-internal-secret')
+  if (internalSecret && internalSecret === process.env.CRON_SECRET) {
+    return NextResponse.next()
+  }
 
   if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next()
   if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) return NextResponse.next()

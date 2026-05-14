@@ -114,7 +114,10 @@ async function processEnrollment(enrollment) {
       try {
         const res = await fetch(`${SITE_URL}/api/send-email`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': CRON_SECRET,
+          },
           body: JSON.stringify({
             to: lead.email,
             subject,
@@ -125,10 +128,14 @@ async function processEnrollment(enrollment) {
             replyTo: campaign.from_email || undefined,
           }),
         })
-        const data = await res.json().catch(() => ({}))
-        if (!data.ok) {
-          console.error('[cron] send-email failed for enrollment', enrollment.id, data)
-          // Don't advance — try again next cycle. But cap retries via a future field.
+        const rawBody = await res.text()
+        let data
+        try { data = JSON.parse(rawBody) } catch { data = { raw: rawBody.slice(0, 500) } }
+        if (!res.ok || !data.ok) {
+          console.error('[cron] send-email failed for enrollment', enrollment.id, {
+            status: res.status,
+            data,
+          })
           return { id: enrollment.id, action: 'send_failed', detail: data }
         }
       } catch (err) {
