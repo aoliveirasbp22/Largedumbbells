@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 const REQUIRED = [
   'first_name',
   'last_name',
+  'country_code',
   'phone',
   'email',
   'age',
@@ -106,14 +107,27 @@ export async function POST(req) {
     )
   }
 
-  // Light phone check (at least 7 digits after stripping non-numerics)
-  const phoneDigits = String(body.phone).replace(/\D/g, '')
-  if (phoneDigits.length < 7) {
+  // ── Phone normalization ───────────────────────────────────────────────
+  // Build E.164-ish: country_code (digits only) + phone (digits only).
+  // No leading +. This matches what Meta DM ingestion + Calls page timezone
+  // lookup expect: a string of pure digits with the country code at the front.
+  const countryCodeDigits = String(body.country_code).replace(/\D/g, '')
+  const phoneDigits       = String(body.phone).replace(/\D/g, '')
+
+  if (countryCodeDigits.length < 1 || countryCodeDigits.length > 4) {
+    return NextResponse.json(
+      { ok: false, reason: 'invalid_country_code' },
+      { status: 400 }
+    )
+  }
+  if (phoneDigits.length < 6 || phoneDigits.length > 15) {
     return NextResponse.json(
       { ok: false, reason: 'invalid_phone' },
       { status: 400 }
     )
   }
+
+  const fullPhone = countryCodeDigits + phoneDigits
 
   // ── Compose insert payload ─────────────────────────────────────────────
   const fullName = `${String(body.first_name).trim()} ${String(body.last_name).trim()}`.trim()
@@ -121,7 +135,7 @@ export async function POST(req) {
   const insertPayload = {
     name:           fullName,
     email:          String(body.email).trim().toLowerCase(),
-    phone:          String(body.phone).trim(),
+    phone:          fullPhone,
     age,
     roadblock:      String(body.struggle).trim(),
     bothered_score: bothered,

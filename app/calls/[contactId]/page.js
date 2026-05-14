@@ -14,14 +14,13 @@ import {
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
 
-// Legacy GHL custom-field IDs. Kept so the render code below can stay unchanged.
-// fetchAll() synthesizes a customFields[] array with these IDs from Supabase columns,
-// then getField() looks up by ID just like before.
+// Legacy GHL custom-field IDs. Kept so getField() lookups stay unchanged.
+// fetchAll() synthesizes a customFields[] array with these IDs from Supabase columns.
 const FIELD_IDS = {
-  struggle: 'WtsEP55kDKmuYvjR3cRM',
-  bothered: 'b9izCUDE2DcOqViZ6Da4',
-  age:      'gvlEzRdj7FhoOw6Yk0p6',
-  invest:   'xLhl7frOJAopwN0r94gX',
+  struggle:   'WtsEP55kDKmuYvjR3cRM',
+  bothered:   'b9izCUDE2DcOqViZ6Da4',
+  age:        'gvlEzRdj7FhoOw6Yk0p6',
+  occupation: 'occupation_field',  // synthetic id, not from GHL — just for the same getField pattern
 }
 
 function getField(customFields, id) {
@@ -167,9 +166,6 @@ export default function ContactProfile() {
   useEffect(() => { fetchAll() }, [contactId])
 
   async function fetchAll() {
-    // Read lead from Supabase by UUID, then normalize to GHL-shape so the
-    // render code below (which expects contactName, firstName, customFields[])
-    // can stay unchanged.
     let normalized = null
     try {
       const { data: lead, error } = await supabase
@@ -193,12 +189,11 @@ export default function ContactProfile() {
           country:     lead.country || '',
           source:      lead.source || 'unknown',
           dateAdded:   lead.created_at,
-          // Synthesize customFields[] so getField(cf, FIELD_IDS.x) works unchanged
           customFields: [
-            { id: FIELD_IDS.struggle, value: lead.roadblock      ?? '' },
-            { id: FIELD_IDS.invest,   value: lead.would_invest   ?? '' },
-            { id: FIELD_IDS.bothered, value: lead.bothered_score != null ? String(lead.bothered_score) : '' },
-            { id: FIELD_IDS.age,      value: lead.age            != null ? String(lead.age) : '' },
+            { id: FIELD_IDS.struggle,   value: lead.roadblock      ?? '' },
+            { id: FIELD_IDS.occupation, value: lead.occupation     ?? '' },
+            { id: FIELD_IDS.bothered,   value: lead.bothered_score != null ? String(lead.bothered_score) : '' },
+            { id: FIELD_IDS.age,        value: lead.age            != null ? String(lead.age) : '' },
           ],
         }
       }
@@ -207,7 +202,6 @@ export default function ContactProfile() {
     }
     setContact(normalized)
 
-    // Load call_log by lead_id (uuid)
     const { data: logData } = await supabase
       .from('call_logs')
       .select('*')
@@ -256,7 +250,6 @@ export default function ContactProfile() {
     }
     setLastSaved(new Date())
 
-    // Trigger campaign enrollment logic (UUID-aware)
     try {
       await handleTagChange(contactId, newTag)
     } catch (err) {
@@ -310,11 +303,11 @@ export default function ContactProfile() {
   const country   = contact.country
   const initials  = ((firstName[0] || contactName[0] || '?') + (lastName[0] || '')).toUpperCase()
 
-  const cf       = contact.customFields || []
-  const struggle = getField(cf, FIELD_IDS.struggle)
-  const invest   = getField(cf, FIELD_IDS.invest)
-  const bothered = getField(cf, FIELD_IDS.bothered)
-  const age      = getField(cf, FIELD_IDS.age)
+  const cf         = contact.customFields || []
+  const struggle   = getField(cf, FIELD_IDS.struggle)
+  const occupation = getField(cf, FIELD_IDS.occupation)
+  const bothered   = getField(cf, FIELD_IDS.bothered)
+  const age        = getField(cf, FIELD_IDS.age)
 
   const tag = callLog?.tag || 'uncalled'
 
@@ -382,7 +375,6 @@ export default function ContactProfile() {
           <CornerBracket position="bl" />
           <CornerBracket position="br" />
 
-          {/* Avatar */}
           <div style={{
             width: isMobile ? 60 : 80,
             height: isMobile ? 60 : 80,
@@ -494,7 +486,7 @@ export default function ContactProfile() {
           <SectionCard title="Survey Answers">
             <FieldRow label="Age" value={age} />
             <FieldRow label="Biggest Struggle" value={struggle} />
-            <FieldRow label="Would Invest" value={invest} />
+            <FieldRow label="Occupation" value={occupation} />
             <FieldRow label="Bothered Score" value={bothered} />
           </SectionCard>
         </div>

@@ -9,14 +9,15 @@ import {
   useIsMobile,
 } from '@/lib/brand'
 
-// Legacy GHL field IDs — kept so getField() and downstream filters
-// can stay unchanged. fetchAll() synthesizes a customFields[] array
-// from Supabase columns with these same IDs.
+// Legacy GHL field IDs kept so getField() lookups stay unchanged.
+// leadToContact() synthesizes a customFields[] array from Supabase columns
+// using these IDs. 'occupation' is a synthetic id (not from GHL) since
+// we replaced the would_invest field with occupation everywhere.
 const FIELD_IDS = {
-  struggle: 'WtsEP55kDKmuYvjR3cRM',
-  bothered: 'b9izCUDE2DcOqViZ6Da4',
-  age:      'gvlEzRdj7FhoOw6Yk0p6',
-  invest:   'xLhl7frOJAopwN0r94gX',
+  struggle:   'WtsEP55kDKmuYvjR3cRM',
+  bothered:   'b9izCUDE2DcOqViZ6Da4',
+  age:        'gvlEzRdj7FhoOw6Yk0p6',
+  occupation: 'occupation_field',
 }
 
 // ─── Timezone helpers ─────────────────────────────────────────────────
@@ -83,10 +84,10 @@ function leadToContact(l) {
     country:     l.country || '',
     dateAdded:   l.created_at,
     customFields: [
-      { id: FIELD_IDS.struggle, value: l.roadblock      ?? '' },
-      { id: FIELD_IDS.invest,   value: l.would_invest   ?? '' },
-      { id: FIELD_IDS.bothered, value: l.bothered_score != null ? String(l.bothered_score) : '' },
-      { id: FIELD_IDS.age,      value: l.age            != null ? String(l.age) : '' },
+      { id: FIELD_IDS.struggle,   value: l.roadblock      ?? '' },
+      { id: FIELD_IDS.occupation, value: l.occupation     ?? '' },
+      { id: FIELD_IDS.bothered,   value: l.bothered_score != null ? String(l.bothered_score) : '' },
+      { id: FIELD_IDS.age,        value: l.age            != null ? String(l.age) : '' },
     ],
   }
 }
@@ -725,12 +726,12 @@ export default function Home() {
       }).length) },
   ]
 
+  // Strongest leads = uncalled/early-tag + bothered ≥4 + age 22-45 + in green call window.
+  // would_invest filter was removed — form fillers self-select for high intent.
   const strongestLeads = contacts
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
       if (['booked', 'not interested', 'called three times'].includes(tag)) return false
-      const invest = getField(c.customFields, FIELD_IDS.invest)
-      if (!invest || !invest.toLowerCase().includes('yes')) return false
       const botheredRaw = getField(c.customFields, FIELD_IDS.bothered)
       const bothered = parseInt(botheredRaw)
       if (isNaN(bothered) || bothered < 4) return false

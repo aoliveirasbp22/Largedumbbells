@@ -491,7 +491,7 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
     { key: 'callWindow', label: 'Call Window' },
     { key: 'tag',        label: 'Tag' },
     { key: 'country',    label: 'Country', searchable: true },
-    { key: 'invest',     label: 'Would Invest' },
+    { key: 'occupation', label: 'Occupation', searchable: true },
     { key: 'bothered',   label: 'Bothered Score' },
     { key: 'age',        label: 'Age' },
     { key: 'source',     label: 'Source' },
@@ -628,11 +628,11 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
 
 // ─── Mobile contact card ──────────────────────────────────────────────
 function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, contactRef, router }) {
-  const struggle = contact.roadblock || '—'
-  const invest   = contact.would_invest || '—'
-  const bothered = contact.bothered_score ?? '—'
-  const age      = contact.age ?? '—'
-  const country  = getCountryName(contact.country)
+  const struggle   = contact.roadblock || '—'
+  const occupation = contact.occupation || '—'
+  const bothered   = contact.bothered_score ?? '—'
+  const age        = contact.age ?? '—'
+  const country    = getCountryName(contact.country)
 
   function goToProfile(e) {
     const t = e.target
@@ -718,7 +718,7 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, c
         </p>
       )}
 
-      {(bothered !== '—' || (invest && invest !== '—')) && (
+      {(bothered !== '—' || (occupation && occupation !== '—')) && (
         <div style={{
           display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
           fontSize: 10,
@@ -730,15 +730,15 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, c
               Bothered <span style={{ color: BRAND.gold, fontWeight: 700 }}>{bothered}/5</span>
             </span>
           )}
-          {bothered !== '—' && invest && invest !== '—' && (
+          {bothered !== '—' && occupation && occupation !== '—' && (
             <span style={{ color: BRAND.textDim }}>·</span>
           )}
-          {invest && invest !== '—' && (
+          {occupation && occupation !== '—' && (
             <span style={{
               color: BRAND.textMuted,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               maxWidth: 220,
-            }}>{invest}</span>
+            }}>{occupation}</span>
           )}
         </div>
       )}
@@ -887,7 +887,7 @@ export default function Calls() {
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const [filters, setFilters] = useState({
-    country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [], source: [],
+    country: [], occupation: [], callWindow: [], tag: [], bothered: [], age: [], source: [],
   })
   const [openFilter, setOpenFilter] = useState(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -902,7 +902,7 @@ export default function Calls() {
   }
 
   function clearAllFilters() {
-    setFilters({ country: [], invest: [], callWindow: [], tag: [], bothered: [], age: [], source: [] })
+    setFilters({ country: [], occupation: [], callWindow: [], tag: [], bothered: [], age: [], source: [] })
     setSearch('')
     setPage(1)
   }
@@ -922,7 +922,7 @@ export default function Calls() {
         if (state.timeframe)            setTimeframe(state.timeframe)
         if (state.perPage)              setPerPage(state.perPage)
         if (state.page)                 setPage(state.page)
-        if (state.filters)              setFilters({ source: [], ...state.filters })
+        if (state.filters)              setFilters({ source: [], occupation: [], ...state.filters })
         if (state.selectedRow)          setSelectedRow(state.selectedRow)
       }
     } catch (err) {
@@ -954,7 +954,6 @@ export default function Calls() {
 
   async function fetchData() {
     try {
-      // Read leads from Supabase, normalize to the shape the rest of the UI expects
       const { data: leads, error } = await supabase
         .from('leads')
         .select('*')
@@ -968,25 +967,22 @@ export default function Calls() {
         return
       }
 
-      // Normalize: leads → GHL-shape (so the rest of the page renders unchanged)
       const normalized = (leads || []).map(l => ({
-        id:           l.id,                              // uuid
+        id:           l.id,
         contactName:  l.name || l.ig_handle || '—',
         email:        l.email || '',
         phone:        l.phone || '',
         country:      l.country || '',
         dateAdded:    l.created_at,
         source:       l.source || 'unknown',
-        // synthesize customFields for unchanged getField() usage downstream
         roadblock:        l.roadblock || '',
-        would_invest:     l.would_invest || '',
+        occupation:       l.occupation || '',
         bothered_score:   l.bothered_score,
         age:              l.age,
       }))
 
       setContacts(normalized)
 
-      // Load call_logs keyed by lead_id (uuid)
       const { data: logs } = await supabase.from('call_logs').select('*').not('lead_id', 'is', null)
       const logsMap = {}
       logs?.forEach(log => { logsMap[log.lead_id] = log })
@@ -1017,7 +1013,6 @@ export default function Calls() {
       await supabase.from('call_logs').insert({ lead_id: leadId, tag, last_contacted: now })
     }
     setCallLogs(prev => ({ ...prev, [leadId]: { ...prev[leadId], lead_id: leadId, tag, last_contacted: now } }))
-    // Pass leadId through to enrollment auto-enrollment hook
     try {
       await handleTagChange(leadId, tag)
     } catch (err) {
@@ -1026,17 +1021,16 @@ export default function Calls() {
   }
 
   async function deleteContact(contact) {
-  const leadId = contact.id
-  try {
-    // campaign_enrollments.contact_id is TEXT (no FK), needs manual delete.
-    // messages.lead_id and call_logs.lead_id both CASCADE → handled automatically.
-    await supabase.from('campaign_enrollments').delete().eq('contact_id', leadId)
-    const { error } = await supabase.from('leads').delete().eq('id', leadId)
+    const leadId = contact.id
+    try {
+      // campaign_enrollments.contact_id is TEXT (no FK), needs manual delete.
+      // messages.lead_id and call_logs.lead_id both CASCADE → handled automatically.
+      await supabase.from('campaign_enrollments').delete().eq('contact_id', leadId)
+      const { error } = await supabase.from('leads').delete().eq('id', leadId)
       if (error) {
         alert('Delete failed: ' + error.message)
         return
       }
-      // Update UI optimistically
       setContacts(prev => prev.filter(c => c.id !== leadId))
       setCallLogs(prev => {
         const next = { ...prev }
@@ -1089,7 +1083,7 @@ export default function Calls() {
     if (timeframe === 'daily')   { d.setHours(0,0,0,0); return d }
     if (timeframe === 'weekly')  { d.setDate(d.getDate() - 7); return d }
     if (timeframe === 'monthly') { d.setDate(d.getDate() - 30); return d }
-    return new Date(0) // 'all'
+    return new Date(0)
   }
   const startDate = getStartDate()
 
@@ -1105,13 +1099,13 @@ export default function Calls() {
   const filtered = timeframeContacts
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
-      const countryName = getCountryName(c.country)
-      const investAnswer = c.would_invest || '—'
-      const botheredVal  = c.bothered_score ?? '—'
-      const ageVal       = c.age ?? '—'
-      const sourceVal    = c.source || 'unknown'
+      const countryName    = getCountryName(c.country)
+      const occupationVal  = c.occupation || '—'
+      const botheredVal    = c.bothered_score ?? '—'
+      const ageVal         = c.age ?? '—'
+      const sourceVal      = c.source || 'unknown'
       if (filters.country.length && !filters.country.includes(countryName)) return false
-      if (filters.invest.length && !filters.invest.includes(investAnswer)) return false
+      if (filters.occupation.length && !filters.occupation.includes(occupationVal)) return false
       if (filters.tag.length && !filters.tag.includes(tag)) return false
       if (filters.bothered.length && !filters.bothered.includes(String(botheredVal))) return false
       if (filters.age.length && !filters.age.includes(String(ageVal))) return false
@@ -1157,7 +1151,7 @@ export default function Calls() {
     { label: 'Email', w: '200px', filterKey: null },
     { label: 'Biggest Struggle', w: '220px', filterKey: null },
     { label: 'Bothered', w: '90px', filterKey: 'bothered' },
-    { label: 'Would Invest?', w: '210px', filterKey: 'invest' },
+    { label: 'Occupation', w: '180px', filterKey: 'occupation' },
     { label: 'Age', w: '70px', filterKey: 'age' },
     { label: 'Country', w: '130px', filterKey: 'country' },
     { label: 'Local Time', w: '140px', filterKey: 'callWindow' },
@@ -1169,7 +1163,7 @@ export default function Calls() {
 
   const filterOptions = {
     country: [...new Set(timeframeContacts.map(c => getCountryName(c.country)).filter(Boolean))].sort(),
-    invest: [...new Set(timeframeContacts.map(c => c.would_invest).filter(v => v && v !== '—'))].sort(),
+    occupation: [...new Set(timeframeContacts.map(c => c.occupation).filter(v => v && v !== '—'))].sort(),
     bothered: [...new Set(timeframeContacts.map(c => String(c.bothered_score ?? '—')).filter(v => v !== '—' && v !== 'null'))].sort(),
     age: [...new Set(timeframeContacts.map(c => String(c.age ?? '—')).filter(v => v !== '—' && v !== 'null'))].sort(),
     source: [...new Set(timeframeContacts.map(c => c.source).filter(Boolean))].sort(),
@@ -1550,7 +1544,7 @@ export default function Calls() {
                                 selected={filters[h.filterKey] || []}
                                 onToggle={v => toggleFilterValue(h.filterKey, v)}
                                 formatLabel={h.filterKey === 'callWindow' ? formatCallWindowLabel : null}
-                                searchable={h.filterKey === 'country'}
+                                searchable={h.filterKey === 'country' || h.filterKey === 'occupation'}
                               />
                             </div>
                           ) : (
@@ -1737,7 +1731,7 @@ export default function Calls() {
                           {contact.bothered_score ?? '—'}
                         </td>
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontSize: 11 }}>
-                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{contact.would_invest || '—'}</span>
+                          <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{contact.occupation || '—'}</span>
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'center', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
                           {contact.age ?? '—'}
