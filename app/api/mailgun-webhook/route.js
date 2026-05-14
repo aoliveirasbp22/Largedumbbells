@@ -6,9 +6,9 @@
 //   - on every event with a Mailgun message-id: update messages row
 //
 // Required env vars:
-//   MAILGUN_WEBHOOK_SIGNING_KEY — from Mailgun > Sending > Webhooks (HTTP webhook signing key)
+//   MAILGUN_WEBHOOK_SIGNING_KEY — from Mailgun > API security > HTTP webhook signing key
 //
-// Configure in Mailgun: Sending > Webhooks > add URL for events:
+// Configure in Mailgun: Send > Webhooks > Domain-level > add URL for events:
 //   delivered, permanent_fail, complained, unsubscribed
 // pointing to https://largedumbbells.vercel.app/api/mailgun-webhook
 
@@ -63,13 +63,13 @@ export async function POST(req) {
   const leadId = data['user-variables']?.leadId || null
 
   console.log('[mailgun-webhook]', event, {
-  recipient,
-  leadId,
-  messageId,
-  rawMessageId: data.message?.headers?.['message-id'],
-  storage_message_id: data.message?.storage?.key,
-  id: data.id,
-})
+    recipient,
+    leadId,
+    messageId,
+    rawMessageId: data.message?.headers?.['message-id'],
+    storage_message_id: data.message?.storage?.key,
+    id: data.id,
+  })
 
   // ── Update leads suppression flags ─────────────────────────────────
   if (leadId) {
@@ -85,14 +85,17 @@ export async function POST(req) {
   }
 
   // ── Update messages row by external_id (the Mailgun message-id) ────
+  // Mailgun returns the id WITH <angle brackets> when sending, but strips
+  // them in webhook events. Try both formats to match either.
   if (messageId) {
+    const bracketed = `<${messageId}>`
     const { error } = await supabase
       .from('messages')
       .update({
         delivery_status: event, // e.g. 'delivered', 'failed', 'complained', 'unsubscribed'
         delivery_updated_at: new Date().toISOString(),
       })
-      .eq('external_id', messageId)
+      .in('external_id', [messageId, bracketed])
 
     // Don't blow up if columns don't exist yet — log and continue
     if (error && !/column .* does not exist/i.test(error.message)) {
