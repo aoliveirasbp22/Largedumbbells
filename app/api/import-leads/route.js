@@ -58,6 +58,8 @@ function mapRow(row) {
   if (name) out.name = name
   delete out._first_name
   delete out._last_name
+  // _tags is a temp marker — extracted later for call_logs, not a leads column
+  delete out._tags
 
   // Coerce types
   if (out.age != null && out.age !== '') {
@@ -138,8 +140,16 @@ export async function POST(req) {
       }
       // Mark import source so we can distinguish later
       m.source = 'import'
-      // Tags get applied to call_logs, not leads — extract and remove
-      const tagsRaw = rows[i]['Tags'] || rows[i]['tags'] || rows[i]['Tag'] || rows[i]['tag'] || ''
+      // Tags get applied to call_logs, not leads. Extract from the original row
+      // since _tags was already deleted from m above. Match any header variation.
+      let tagsRaw = ''
+      for (const [k, v] of Object.entries(rows[i])) {
+        const nk = normalizeHeader(k)
+        if (nk === 'tags' || nk === 'tag') {
+          tagsRaw = v || ''
+          break
+        }
+      }
       mapped.push({ lead: m, tagsRaw })
     } catch (err) {
       errors.push({ row: i + 2, reason: 'map_error', detail: String(err) })
