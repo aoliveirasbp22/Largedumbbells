@@ -5,14 +5,13 @@
 //
 // Critical design choice: we advance the enrollment BEFORE sending. If a send
 // fails mid-flight (timeout, network), the enrollment is already moved on —
-// we lose at most one email, never send duplicates. Email duplication is far
-// worse than a missed send (deliverability damage, complaints).
+// we lose at most one email, never send duplicates.
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { renderTemplate } from '@/lib/template'
 
-export const maxDuration = 60 // Allow up to 60s per cron tick
+export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET || ''
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://largedumbbells.vercel.app'
@@ -39,15 +38,9 @@ function strip(html) {
     .trim()
 }
 
-// Claim an enrollment and ATOMICALLY advance it past the current step in
-// the same UPDATE. We compute the new state up front so the row reflects
-// completion of this step before we fire any side effect.
-//
-// Returns { enrollment, step, lead, campaign, isLastStep } if we won the
-// claim and have everything needed to fire the side effect, or null if
-// another instance got there first / nothing to do.
 async function claimAndAdvance(enrollment) {
-  // Load campaign
+  console.log('[cron-debug] claimAndAdvance start', { enrollmentId: enrollment.id, contact_id: enrollment.contact_id, current_step: enrollment.current_step })
+
   const { data: campaign } = await supabase
     .from('email_campaigns')
     .select('*')
@@ -55,6 +48,7 @@ async function claimAndAdvance(enrollment) {
     .maybeSingle()
 
   if (!campaign || campaign.status !== 'active') {
+    console.log('[cron-debug] campaign missing or not active', { campaign_id: enrollment.campaign_id, status: campaign?.status })
     await supabase.from('campaign_enrollments')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
       .eq('id', enrollment.id)
@@ -62,14 +56,16 @@ async function claimAndAdvance(enrollment) {
     return null
   }
 
-  // Load steps
   const { data: steps } = await supabase
     .from('email_campaign_steps')
     .select('*')
     .eq('campaign_id', enrollment.campaign_id)
     .order('position', { ascending: true })
 
+  console.log('[cron-debug] steps loaded', { count: steps?.length, current_step: enrollment.current_step })
+
   if (!steps || enrollment.current_step >= steps.length) {
+    console.log('[cron-debug] no steps or past end, marking completed')
     await supabase.from('campaign_enrollments')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
       .eq('id', enrollment.id)
@@ -78,15 +74,19 @@ async function claimAndAdvance(enrollment) {
   }
 
   const step = steps[enrollment.current_step]
+  console.log('[cron-debug] step picked', { type: step.type, position: step.position, has_subject: !!step.subject, has_body: !!step.body })
 
-  // Load lead
   const isUuid = /^[0-9a-f-]{36}$/i.test(enrollment.contact_id)
+  console.log('[cron-debug] isUuid check', { contact_id: enrollment.contact_id, isUuid })
+
   let lead = null
   if (isUuid) {
     const { data } = await supabase
       .from('leads').select('*').eq('id', enrollment.contact_id).maybeSingle()
     lead = data
   }
+  console.log('[cron-debug] lead lookup', { found: !!lead, email: lead?.email })
+
   if (!lead) {
     await supabase.from('campaign_enrollments')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
@@ -95,8 +95,8 @@ async function claimAndAdvance(enrollment) {
     return null
   }
 
-  // Suppression check
   if (lead.unsubscribed || lead.bounced || lead.complained) {
+    console.log('[cron-debug] lead suppressed', { unsubscribed: lead.unsubscribed, bounced: lead.bounced, complained: lead.complained })
     await supabase.from('campaign_enrollments')
       .update({ status: 'unsubscribed', updated_at: new Date().toISOString() })
       .eq('id', enrollment.id)
@@ -104,7 +104,6 @@ async function claimAndAdvance(enrollment) {
     return null
   }
 
-  // Compute the NEW state for this enrollment based on the step type
   const nextStep = enrollment.current_step + 1
   const isLastStep = nextStep >= steps.length
 
@@ -113,14 +112,9 @@ async function claimAndAdvance(enrollment) {
     const ms = (step.duration || 1) * (MS_PER_UNIT[step.unit] || MS_PER_UNIT.days)
     nextActionAt = new Date(Date.now() + ms)
   } else {
-    // email / sms: advance immediately so the next step runs on the next tick
     nextActionAt = new Date()
   }
 
-  // ATOMIC CLAIM + ADVANCE in a single UPDATE.
-  // The .eq('current_step', enrollment.current_step) is the concurrency check:
-  // if any other instance already advanced this enrollment, our update affects
-  // 0 rows and .maybeSingle() returns null.
   const { data: claimed, error: claimErr } = await supabase
     .from('campaign_enrollments')
     .update({
@@ -131,7 +125,7 @@ async function claimAndAdvance(enrollment) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', enrollment.id)
-    .eq('current_step', enrollment.current_step) // optimistic concurrency
+    .eq('current_step', enrollment.current_step)
     .eq('status', 'active')
     .select()
     .maybeSingle()
@@ -141,19 +135,18 @@ async function claimAndAdvance(enrollment) {
     return null
   }
   if (!claimed) {
-    // Another instance got there first
+    console.log('[cron-debug] claim returned null (another instance won)')
     return null
   }
 
+  console.log('[cron-debug] claim successful, advanced to step', nextStep)
   return { enrollment: claimed, step, lead, campaign, isLastStep }
 }
 
-// Fire the side effect for a step. By the time this is called, the enrollment
-// has already advanced — so failure here means a missed send (acceptable),
-// not a duplicate (unacceptable).
 async function fireSideEffect({ step, lead, campaign, enrollmentId }) {
+  console.log('[cron-debug] fireSideEffect start', { step_type: step.type, enrollmentId })
+
   if (step.type === 'wait') {
-    // No side effect for wait — already scheduled by the advance
     return { action: 'wait_scheduled' }
   }
 
@@ -172,6 +165,11 @@ async function fireSideEffect({ step, lead, campaign, enrollmentId }) {
     const html    = renderTemplate(step.body || '', lead)
     const text    = strip(html)
 
+    console.log('[cron-debug] about to fetch send-email')
+    console.log('[cron-debug] SITE_URL:', SITE_URL)
+    console.log('[cron-debug] CRON_SECRET length:', CRON_SECRET.length)
+    console.log('[cron-debug] to:', lead.email, 'leadId:', lead.id, 'subject:', subject)
+
     try {
       const res = await fetch(`${SITE_URL}/api/send-email`, {
         method: 'POST',
@@ -189,15 +187,20 @@ async function fireSideEffect({ step, lead, campaign, enrollmentId }) {
           replyTo: campaign.from_email || undefined,
         }),
       })
+
       const rawBody = await res.text()
       let data
       try { data = JSON.parse(rawBody) } catch { data = { raw: rawBody.slice(0, 500) } }
+
+      console.log('[cron-debug] send-email response status:', res.status)
+      console.log('[cron-debug] send-email response body:', JSON.stringify(data).slice(0, 500))
+
       if (!res.ok || !data.ok) {
         console.error('[cron] send-email failed for enrollment', enrollmentId, {
           status: res.status,
           data,
         })
-        return { action: 'send_failed', detail: data }
+        return { action: 'send_failed', detail: data, httpStatus: res.status }
       }
       return { action: 'sent', mailgunId: data.mailgunId }
     } catch (err) {
@@ -211,13 +214,13 @@ async function fireSideEffect({ step, lead, campaign, enrollmentId }) {
 }
 
 export async function GET(req) {
-  // Vercel sends Authorization: Bearer <CRON_SECRET> for cron-triggered calls
+  console.log('[cron-debug] GET start. CRON_SECRET len:', CRON_SECRET.length, 'SITE_URL:', SITE_URL)
+
   const authHeader = req.headers.get('authorization') || ''
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ ok: false, reason: 'unauthorized' }, { status: 401 })
   }
 
-  // Fetch due enrollments
   const { data: due, error } = await supabase
     .from('campaign_enrollments')
     .select('*')
@@ -230,6 +233,8 @@ export async function GET(req) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
+  console.log('[cron-debug] due enrollments count:', due?.length || 0)
+
   if (!due || due.length === 0) {
     return NextResponse.json({ ok: true, processed: 0 })
   }
@@ -237,14 +242,11 @@ export async function GET(req) {
   const results = []
   for (const enr of due) {
     try {
-      // Claim + advance in one shot — enrollment is now safely past this step
       const claimed = await claimAndAdvance(enr)
       if (!claimed) {
         results.push({ id: enr.id, action: 'skipped_or_already_processed' })
         continue
       }
-      // Fire the side effect (send email, etc). Failure here = missed send,
-      // not duplicate. Acceptable trade-off.
       const sideEffect = await fireSideEffect({
         step: claimed.step,
         lead: claimed.lead,
