@@ -229,6 +229,7 @@ function RichTextEditor({ value, onChange }) {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        className="rt-editor"
         style={{
           background: BRAND.bgInput, color: BRAND.textPrimary,
           padding: 14,
@@ -238,6 +239,13 @@ function RichTextEditor({ value, onChange }) {
           letterSpacing: '0.01em',
         }}
       />
+      <style jsx>{`
+        :global(.rt-editor a) {
+          color: ${BRAND.gold};
+          text-decoration: underline;
+          cursor: text;
+        }
+      `}</style>
     </div>
   )
 }
