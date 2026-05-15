@@ -13,6 +13,17 @@ import {
 
 const TAGS = ['uncalled', 'called once', 'called twice', 'called three times', 'call back', 'not interested', 'booked']
 
+// Source filter options. NULL = match any source (default).
+// 'form'     = only enroll leads that came from the branded form
+// 'facebook' = only enroll leads from Meta DM ingestion
+// 'import'   = only enroll leads brought in via CSV import
+const SOURCE_OPTIONS = [
+  { value: '',         label: 'Any Source' },
+  { value: 'form',     label: 'Form Submissions' },
+  { value: 'facebook', label: 'Instagram DMs' },
+  { value: 'import',   label: 'CSV Imports' },
+]
+
 const VARIABLES = [
   { key: 'first_name',       label: 'First name' },
   { key: 'last_name',        label: 'Last name' },
@@ -1036,7 +1047,32 @@ export default function CampaignBuilder() {
                 fontFamily: FONT_BODY,
                 letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
               }}>
-                Campaign Exits When: Lead Books A Call, Or Is Manually Removed
+                Campaign Exits When: Lead Books, Marks Not Interested, Or Is Manually Removed
+              </p>
+            </div>
+
+            <div>
+              <InputLabel>Audience — Only Enroll Leads From</InputLabel>
+              <select
+                value={campaign.trigger_source || ''}
+                onChange={e => updateField('trigger_source', e.target.value || null)}
+                style={{
+                  ...baseInputStyle,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}>
+                {SOURCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <p style={{
+                fontSize: 10, marginTop: 8, color: BRAND.textDim,
+                fontFamily: FONT_BODY,
+                letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+              }}>
+                {campaign.trigger_source
+                  ? `Only Leads With Source = ${campaign.trigger_source} Will Enroll`
+                  : 'All Leads Will Enroll Regardless Of Where They Came From'}
               </p>
             </div>
 

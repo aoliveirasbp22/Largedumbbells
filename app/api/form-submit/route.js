@@ -2,10 +2,13 @@
 //
 // Receives a submission from the branded /form page, validates fields,
 // rate limits, blocks honeypot bots, and creates a new row in the leads
-// table with source = 'form'.
+// table with source = 'form'. After insert, fires handleTagChange() so the
+// lead auto-enrolls in any campaign whose trigger_tag === 'uncalled' AND
+// (trigger_source IS NULL OR trigger_source === 'form').
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { handleTagChange } from '@/lib/enrollments'
 
 // Allowed fields (any other keys in the body are silently ignored)
 const REQUIRED = [
@@ -160,6 +163,17 @@ export async function POST(req) {
       { ok: false, reason: 'db_error' },
       { status: 500 }
     )
+  }
+
+  // ── Auto-enroll: fire the same side effect as if a tag had been set to ──
+  // 'uncalled'. handleTagChange() filters by trigger_source, so this only
+  // enrolls form-fill leads in campaigns specifically targeting source='form'.
+  // We don't fail the response if enrollment errors — lead is already inserted.
+  try {
+    await handleTagChange(data.id, 'uncalled')
+  } catch (err) {
+    console.error('[form-submit] enrollment side effect failed:', err)
+    // Continue — lead is already inserted, success response still valid
   }
 
   return NextResponse.json({ ok: true, leadId: data.id })
