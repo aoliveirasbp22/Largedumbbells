@@ -68,9 +68,10 @@ function mapRow(row) {
     const n = parseInt(out.bothered_score, 10)
     out.bothered_score = Number.isFinite(n) ? n : null
   }
-  // Normalize phone: strip non-digit/+ chars, keep leading +
+  // Normalize phone: digits only, strip everything else including leading +
+  // (matches form-submit route which stores E.164 as digits-only)
   if (out.phone) {
-    out.phone = String(out.phone).trim().replace(/[^\d+]/g, '')
+    out.phone = String(out.phone).trim().replace(/\D/g, '')
   }
   // Normalize email: lowercase
   if (out.email) {
