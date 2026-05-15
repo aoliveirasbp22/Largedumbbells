@@ -31,8 +31,8 @@ const VARIABLES = [
   { key: 'email',            label: 'Email' },
   { key: 'phone',            label: 'Phone' },
   { key: 'country',          label: 'Country' },
-  { key: 'biggest_struggle', label: 'Biggest struggle' },
-  { key: 'would_invest',     label: 'Would invest answer' },
+ { key: 'biggest_struggle', label: 'Biggest struggle' },
+  { key: 'occupation',       label: 'Occupation' },
   { key: 'bothered',         label: 'Bothered score' },
   { key: 'age',              label: 'Age' },
 ]
