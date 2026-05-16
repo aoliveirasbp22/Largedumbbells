@@ -955,9 +955,10 @@ export default function Calls() {
   async function fetchData() {
     try {
       const { data: leads, error } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false })
+  .from('leads')
+  .select('*')
+  .order('created_at', { ascending: false })
+  .range(0, 9999)
 
       if (error) {
         console.error('Failed to load leads:', error)
