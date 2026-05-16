@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/ghl-webhook',
   '/api/form-submit',
   '/form',
+  '/form/thanks',
   '/privacy',
   '/terms',
   '/api/unsubscribe',

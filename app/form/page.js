@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground,
@@ -82,12 +83,12 @@ function validate(v) {
 
 export default function FormPage() {
   const isMobile = useIsMobile()
+  const router = useRouter()
 
   const [values, setValues]         = useState(INITIAL)
   const [errors, setErrors]         = useState({})
   const [website, setWebsite]       = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone]             = useState(false)
   const [submitError, setSubmitError] = useState('')
 
   function setField(key, v) {
@@ -125,14 +126,17 @@ export default function FormPage() {
         setSubmitting(false)
         return
       }
-      setDone(true)
+      // Hard redirect to the post-submit landing page. We use window.location.assign
+      // (full reload) rather than router.push (client-side nav) because /form/thanks
+      // is a standalone page with its own <style> block — a clean load avoids any
+      // chance of Next.js style/state bleed-through from the form.
+      // submitting stays true until navigation completes, preventing double-submits.
+      window.location.assign('/form/thanks')
     } catch {
       setSubmitError('Network error. Please try again.')
       setSubmitting(false)
     }
   }
-
-  if (done) return <ThankYou isMobile={isMobile} />
 
   return (
     <PageBackground style={{ minHeight: '100vh' }}>
@@ -699,69 +703,5 @@ function CountryInput({ value, onChange, hasError }) {
         </div>
       )}
     </div>
-  )
-}
-
-function ThankYou({ isMobile }) {
-  return (
-    <PageBackground style={{
-      minHeight: '100vh',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
-    }}>
-      <div style={{
-        position: 'relative',
-        width: '100%', maxWidth: 480,
-        background: BRAND.bgCard,
-        border: `1px solid ${BRAND.border}`,
-        padding: isMobile ? '40px 24px' : '56px 36px',
-        textAlign: 'center',
-      }}>
-        <CornerBracket position="tl" />
-        <CornerBracket position="tr" />
-        <CornerBracket position="bl" />
-        <CornerBracket position="br" />
-
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
-          <img
-            src="/logo-large-dumbbells.png"
-            alt=""
-            style={{ width: 56, height: 56, opacity: 0.95 }}
-          />
-        </div>
-
-        <Eyebrow style={{ fontSize: 10, letterSpacing: '0.35em', marginBottom: 14 }}>
-          Submission Received
-        </Eyebrow>
-
-        <DisplayHeading size={isMobile ? 30 : 38} style={{ marginBottom: 14 }}>
-          Thank You
-        </DisplayHeading>
-
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
-          <GoldRule width={40} />
-        </div>
-
-        <p style={{
-          fontFamily: FONT_BODY,
-          fontSize: 14, lineHeight: 1.6,
-          color: BRAND.textSecondary,
-          letterSpacing: '0.01em',
-          margin: 0,
-        }}>
-          Your Busy Body Blueprint will be sent to your email shortly.
-        </p>
-
-        <p style={{
-          marginTop: 28,
-          fontFamily: FONT_BODY,
-          fontSize: 9,
-          color: BRAND.textDim,
-          letterSpacing: '0.25em', textTransform: 'uppercase', fontWeight: 700,
-        }}>
-          Large Dumbbells
-        </p>
-      </div>
-    </PageBackground>
   )
 }
