@@ -11,7 +11,7 @@ const PUBLIC_PATHS = [
   '/api/webhook',
   '/api/ghl-webhook',
   '/api/form-submit',
-  '/api/send-email',       
+  '/api/send-email',
   '/form',
   '/form/thanks',
   '/privacy',
@@ -19,6 +19,9 @@ const PUBLIC_PATHS = [
   '/api/unsubscribe',
   '/api/mailgun-webhook',
   '/api/cron/run-campaigns',
+  '/api/twilio/voice',
+  '/api/twilio/status',
+  '/api/twilio/sms-inbound',
 ]
 
 const PUBLIC_PREFIXES = [
