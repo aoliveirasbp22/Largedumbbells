@@ -11,22 +11,17 @@
 //     to:         '+13055551234',
 //     leadName:   'Carlos',
 //     leadId:     'uuid-...',
-//     currentTag: 'called once',   // optional — drives the smart "next called" suggestion
+//     currentTag: 'called once',
 //   })
 //
-// Post-call UI:
-//   Row 1 (always):       Booked · Call Back · Not Interested
-//   Row 2 (smart suggest): Mark As Called Once / Twice / Three Times
-//                          (label depends on currentTag passed to startCall)
-//   Row 3:                Skip
-//
-// Tag persistence:
-//   applyOutcome writes to BOTH:
-//     - leads.tag + leads.tag_updated_at  (new home for current tag)
-//     - call_logs.tag + call_logs.last_contacted + call_logs.updated_at
-//       (legacy per-lead row that the existing Calls page reads from)
-//   This dual-write keeps the existing Calls page UI in sync while the
-//   underlying schema migration is in progress.
+// Token refresh strategy:
+//   Tokens expire after 1 hour (set server-side in /api/twilio/token).
+//   To avoid setters hitting an expired token mid-day, we:
+//     1. Refresh on a 50-minute interval while the device is alive
+//     2. Refresh again right before any startCall() if the token is stale
+//        (older than 50 minutes since last fetch)
+//   This is belt-and-suspenders — either alone would work; both means even
+//   if the interval misfires the next call attempt always rescues itself.
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { BRAND, FONT_BODY, FONT_DISPLAY, CornerBracket, useIsMobile, formatPhone } from '@/lib/brand'
@@ -34,6 +29,10 @@ import { supabase } from '@/lib/supabase'
 import { handleTagChange } from '@/lib/enrollments'
 
 const DialerContext = createContext(null)
+
+// Refresh the token if it's older than this many milliseconds.
+// Twilio tokens have a 1-hour TTL; we refresh well before to be safe.
+const TOKEN_REFRESH_MS = 50 * 60 * 1000   // 50 minutes
 
 export function useDialer() {
   const ctx = useContext(DialerContext)
@@ -69,9 +68,10 @@ function calledTagLabel(tag) {
 export function DialerProvider({ children }) {
   const isMobile = useIsMobile()
 
-  const deviceRef = useRef(null)
-  const callRef   = useRef(null)
-  const startedAtRef = useRef(null)
+  const deviceRef     = useRef(null)
+  const callRef       = useRef(null)
+  const startedAtRef  = useRef(null)
+  const tokenFetchedAtRef = useRef(0)   // ms timestamp of last successful token fetch
 
   const [ready, setReady]         = useState(false)
   const [callState, setCallState] = useState('idle')
@@ -80,6 +80,26 @@ export function DialerProvider({ children }) {
   const [duration, setDuration]   = useState(0)
   const [errorMsg, setErrorMsg]   = useState(null)
 
+  // ─── Fetch a fresh token and update the device if it exists ────────────
+  const refreshToken = useCallback(async () => {
+    try {
+      const res = await fetch('/api/twilio/token', { method: 'POST' })
+      const data = await res.json()
+      if (!data.ok || !data.token) {
+        throw new Error(data.reason || 'token_failed')
+      }
+      tokenFetchedAtRef.current = Date.now()
+      if (deviceRef.current) {
+        deviceRef.current.updateToken(data.token)
+      }
+      return data.token
+    } catch (err) {
+      console.error('[dialer] token refresh failed:', err)
+      return null
+    }
+  }, [])
+
+  // ─── Initialize the Twilio Device once ─────────────────────────────────
   const initDevice = useCallback(async () => {
     if (deviceRef.current) return deviceRef.current
     try {
@@ -88,6 +108,8 @@ export function DialerProvider({ children }) {
       if (!data.ok || !data.token) {
         throw new Error(data.reason || 'token_failed')
       }
+      tokenFetchedAtRef.current = Date.now()
+
       const { Device } = await import('@twilio/voice-sdk')
       const device = new Device(data.token, {
         codecPreferences: ['opus', 'pcmu'],
@@ -101,13 +123,9 @@ export function DialerProvider({ children }) {
       })
 
       device.on('tokenWillExpire', async () => {
-        try {
-          const r = await fetch('/api/twilio/token', { method: 'POST' })
-          const d = await r.json()
-          if (d.token) device.updateToken(d.token)
-        } catch (err) {
-          console.error('[dialer] token refresh failed:', err)
-        }
+        // Twilio fires this when the token has ~5 min left.
+        // We catch it as a backup; the 50-min interval should already have refreshed.
+        await refreshToken()
       })
 
       await device.register()
@@ -120,8 +138,21 @@ export function DialerProvider({ children }) {
       setCallState('error')
       return null
     }
-  }, [])
+  }, [refreshToken])
 
+  // ─── Proactive token refresh interval ──────────────────────────────────
+  // Runs every 50 minutes for the life of the page. If the device hasn't
+  // been initialized yet (no calls made), this no-ops harmlessly.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (deviceRef.current) {
+        refreshToken()
+      }
+    }, TOKEN_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [refreshToken])
+
+  // ─── Start a call ──────────────────────────────────────────────────────
   const startCall = useCallback(async ({ to, leadName, leadId, currentTag }) => {
     if (!to) {
       setErrorMsg('No phone number')
@@ -152,6 +183,13 @@ export function DialerProvider({ children }) {
 
     const device = await initDevice()
     if (!device) return
+
+    // Pre-flight token freshness check. If the token is older than the
+    // refresh threshold, refresh before placing the call.
+    const tokenAge = Date.now() - tokenFetchedAtRef.current
+    if (tokenAge > TOKEN_REFRESH_MS) {
+      await refreshToken()
+    }
 
     try {
       const call = await device.connect({ params: { To: normalizedTo } })
@@ -184,7 +222,7 @@ export function DialerProvider({ children }) {
       setErrorMsg(err?.message || 'Could not place call')
       setCallState('error')
     }
-  }, [initDevice])
+  }, [initDevice, refreshToken])
 
   const toggleMute = useCallback(() => {
     const call = callRef.current
@@ -212,8 +250,6 @@ export function DialerProvider({ children }) {
   }, [])
 
   // ─── Apply an outcome tag — writes to BOTH leads.tag and call_logs ─────
-  // This mirrors what the existing tag dropdown on the Calls page does,
-  // so the right-column tag visibly updates after a call.
   const applyOutcome = useCallback(async (tag) => {
     const leadId = currentLead?.leadId
     if (!leadId) {
@@ -231,12 +267,11 @@ export function DialerProvider({ children }) {
         .eq('id', leadId)
 
       // 2. Write to call_logs (legacy per-lead row that the Calls page reads)
-      //    Try update first; if no row exists, insert.
       const { data: existing } = await supabase
         .from('call_logs')
         .select('id')
         .eq('lead_id', leadId)
-        .is('twilio_call_sid', null)        // the legacy "summary" row, not a per-call row
+        .is('twilio_call_sid', null)
         .order('updated_at', { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle()
@@ -267,6 +302,7 @@ export function DialerProvider({ children }) {
         }))
       }
     } catch (err) {
+      console.error('[dialer] applyOutcome failed:', err)
     }
 
     dismiss()
@@ -491,7 +527,6 @@ function DialerWidget({
             Tag this call
           </div>
 
-          {/* Row 1: always-visible outcomes */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
             {OUTCOME_TAGS.map(opt => (
               <button
@@ -521,7 +556,6 @@ function DialerWidget({
             ))}
           </div>
 
-          {/* Row 2: smart-suggested called-N */}
           <button
             onClick={() => onApplyOutcome(suggestedCalledTag)}
             style={{
