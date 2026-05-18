@@ -9,10 +9,6 @@ import {
   useIsMobile,
 } from '@/lib/brand'
 
-// Legacy GHL field IDs kept so getField() lookups stay unchanged.
-// leadToContact() synthesizes a customFields[] array from Supabase columns
-// using these IDs. 'occupation' is a synthetic id (not from GHL) since
-// we replaced the would_invest field with occupation everywhere.
 const FIELD_IDS = {
   struggle:   'WtsEP55kDKmuYvjR3cRM',
   bothered:   'b9izCUDE2DcOqViZ6Da4',
@@ -20,7 +16,6 @@ const FIELD_IDS = {
   occupation: 'occupation_field',
 }
 
-// ─── Timezone helpers ─────────────────────────────────────────────────
 const COUNTRY_TIMEZONES = {
   '1876':'America/Jamaica','1868':'America/Port_of_Spain','1246':'America/Barbados',
   '213':'Africa/Algiers','216':'Africa/Tunis','218':'Africa/Tripoli',
@@ -39,13 +34,11 @@ function isInGreenWindow(phone) {
   if (!phone) return false
   const digits = phone.replace(/\D/g, '')
   if (!digits) return false
-
   let tz = COUNTRY_TIMEZONES[digits.slice(0, 4)]
     || COUNTRY_TIMEZONES[digits.slice(0, 3)]
     || COUNTRY_TIMEZONES[digits.slice(0, 2)]
   if (!tz && digits.startsWith('1')) tz = 'America/New_York'
   if (!tz) return false
-
   try {
     const now = new Date()
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -72,20 +65,12 @@ function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
 }
 
-// Classify a lead row as a DM lead vs a form lead.
-// DM leads come from Meta/Instagram (source='dm' or psid set).
-// Form leads come from the /form intake (source='form' or 'import').
 function isDmLead(l) {
   if (l.source === 'dm') return true
   if (l.platform === 'instagram' && l.psid) return true
   return false
 }
-function isFormLead(l) {
-  return !isDmLead(l)
-}
 
-// Normalize a Supabase leads row into the GHL-shape that the rest of
-// this dashboard expects (contactName, dateAdded, customFields[], etc).
 function leadToContact(l) {
   const name = l.name || l.ig_handle || ''
   return {
@@ -104,7 +89,6 @@ function leadToContact(l) {
   }
 }
 
-// ─── Chart ────────────────────────────────────────────────────────────
 function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
   const containerRef = useRef(null)
   const [hover, setHover] = useState(null)
@@ -119,8 +103,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
 
   const allValues = series.flatMap(s => s.data)
   const max = Math.max(...allValues, 1)
-  const min = 0
-  const range = max - min || 1
+  const range = max || 1
   const H = height
   const numPoints = series[0].data.length
 
@@ -128,7 +111,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
     const s = series[seriesIdx]
     const v = s.data[pointIdx]
     const x = numPoints === 1 ? containerWidth / 2 : (pointIdx / (s.data.length - 1)) * containerWidth
-    const y = H - ((v - min) / range) * (H - 6) - 3
+    const y = H - (v / range) * (H - 6) - 3
     return { x, y, value: v }
   }
 
@@ -137,11 +120,9 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
     const containerWidth = rect.width
-
     const pointWidth = numPoints === 1 ? containerWidth : containerWidth / (numPoints - 1)
     const pointIdx = numPoints === 1 ? 0 : Math.round(mouseX / pointWidth)
     const clampedIdx = Math.max(0, Math.min(numPoints - 1, pointIdx))
-
     let nearestSeriesIdx = 0
     let nearestDist = Infinity
     series.forEach((s, idx) => {
@@ -152,7 +133,6 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
         nearestSeriesIdx = idx
       }
     })
-
     setHover({ seriesIdx: nearestSeriesIdx, pointIdx: clampedIdx, mouseX, mouseY, containerWidth })
   }
 
@@ -180,7 +160,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
             const isDimmed = hover && hover.seriesIdx !== idx
             if (s.data.length === 1) {
               const v = s.data[0]
-              const y = H - ((v - min) / range) * (H - 6) - 3
+              const y = H - (v / range) * (H - 6) - 3
               return (
                 <circle key={idx} cx="50" cy={y} r="2"
                   fill={s.color}
@@ -191,7 +171,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
             }
             const points = s.data.map((v, i) => {
               const x = (i / (s.data.length - 1)) * 100
-              const y = H - ((v - min) / range) * (H - 6) - 3
+              const y = H - (v / range) * (H - 6) - 3
               return `${x},${y}`
             }).join(' ')
             return (
@@ -284,8 +264,7 @@ function MiniChart({ series, axisLabels, tooltipLabels, height = 56 }) {
   )
 }
 
-// ─── Pipeline card ────────────────────────────────────────────────────
-function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tooltipLabels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
+function PipelineCard({ title, href, stats, series, axisLabels, tooltipLabels, timeframe, setTimeframe, rangeLabel, listTitle, listItems, renderListItem, emptyText }) {
   const [hovered, setHovered] = useState(false)
   const isMobile = useIsMobile()
   return (
@@ -304,13 +283,11 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         height: '100%',
         transition: 'border-color 0.25s ease',
       }}>
-
       <CornerBracket position="tl" />
       <CornerBracket position="tr" />
       <CornerBracket position="bl" />
       <CornerBracket position="br" />
 
-      {/* Header */}
       <div>
         <div style={{
           display: 'flex',
@@ -336,9 +313,7 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
               fontSize: isMobile ? 9 : 10, color: BRAND.textMuted, fontWeight: 600,
               letterSpacing: '0.15em', textTransform: 'uppercase',
               fontFamily: FONT_BODY,
-            }}>
-              {rangeLabel}
-            </span>
+            }}>{rangeLabel}</span>
             <div style={{ display: 'flex', gap: 0, border: `1px solid ${BRAND.border}`, borderRadius: 2 }}>
               {[
                 { key: 'weekly',  label: 'W' },
@@ -367,7 +342,6 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         </div>
       </div>
 
-      {/* Stats grid — on mobile, 2 columns instead of 4 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile && stats.length > 2
@@ -396,9 +370,7 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
               letterSpacing: '0.02em',
               fontVariantNumeric: 'tabular-nums',
               margin: 0,
-            }}>
-              {s.value}
-            </p>
+            }}>{s.value}</p>
             <Eyebrow color={BRAND.textMuted} style={{ marginTop: 6, letterSpacing: '0.2em', fontSize: 9 }}>
               {s.label}
             </Eyebrow>
@@ -406,13 +378,11 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         ))}
       </div>
 
-      {/* Trend chart */}
       <div>
         <Eyebrow color={BRAND.textDim} style={{ marginBottom: 8, letterSpacing: '0.3em', fontSize: 9 }}>Trend</Eyebrow>
         <MiniChart series={series} axisLabels={axisLabels} tooltipLabels={tooltipLabels} />
       </div>
 
-      {/* List */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Eyebrow color={BRAND.textDim} style={{ marginBottom: 10, letterSpacing: '0.3em', fontSize: 9 }}>
           {listTitle}
@@ -434,7 +404,6 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
         )}
       </div>
 
-      {/* CTA */}
       <Link href={href}
         style={{
           background: 'transparent',
@@ -468,7 +437,6 @@ function PipelineCard({ phaseLabel, title, href, stats, series, axisLabels, tool
   )
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────
 function getBuckets(timeframe) {
   const buckets = []
   const now = new Date()
@@ -537,64 +505,76 @@ function timeAgoShort(dateStr) {
   return `${days}d`
 }
 
-// ─── Sign out button ──────────────────────────────────────────────────
 function SignOutButton({ isMobile }) {
   const [signingOut, setSigningOut] = useState(false)
+  const [hovered, setHovered] = useState(false)
   async function handleSignOut() {
     if (signingOut) return
     setSigningOut(true)
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } catch (err) {
-      console.error('[signout] error:', err)
-    }
-    // Hard-navigate so the proxy sees the cleared cookie immediately.
+    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch {}
     window.location.href = '/login'
   }
   return (
     <button
       onClick={handleSignOut}
       disabled={signingOut}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        background: 'transparent',
-        color: BRAND.textMuted,
-        border: `1px solid ${BRAND.border}`,
-        padding: isMobile ? '6px 10px' : '7px 14px',
-        fontSize: 9, fontWeight: 700,
-        letterSpacing: '0.2em', textTransform: 'uppercase',
+        background: hovered ? '#2a2a2a' : '#1c1c1c',
+        color: hovered ? BRAND.textPrimary : BRAND.textSecondary,
+        border: `1px solid ${hovered ? BRAND.borderStrong : BRAND.border}`,
+        padding: isMobile ? '7px 12px' : '8px 16px',
+        fontSize: 10, fontWeight: 700,
+        letterSpacing: '0.22em', textTransform: 'uppercase',
         fontFamily: FONT_BODY,
         cursor: signingOut ? 'not-allowed' : 'pointer',
         transition: 'all 0.15s',
-      }}
-      onMouseEnter={e => {
-        if (signingOut) return
-        e.currentTarget.style.color = BRAND.gold
-        e.currentTarget.style.borderColor = BRAND.borderGoldStrong
-      }}
-      onMouseLeave={e => {
-        if (signingOut) return
-        e.currentTarget.style.color = BRAND.textMuted
-        e.currentTarget.style.borderColor = BRAND.border
+        opacity: signingOut ? 0.6 : 1,
       }}>
       {signingOut ? 'Signing Out…' : 'Sign Out'}
     </button>
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────
+function ManageTeamButton({ isMobile }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <Link
+      href="/users"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? '#c79655' : BRAND.gold,
+        color: '#000',
+        border: `1px solid ${BRAND.gold}`,
+        padding: isMobile ? '7px 12px' : '8px 16px',
+        fontSize: 10, fontWeight: 700,
+        letterSpacing: '0.22em', textTransform: 'uppercase',
+        fontFamily: FONT_BODY,
+        textDecoration: 'none',
+        boxShadow: hovered ? `0 0 20px ${BRAND.goldGlow}` : 'none',
+        transition: 'all 0.15s',
+        display: 'inline-block',
+      }}>
+      {isMobile ? 'Team' : 'Manage Team'}
+    </Link>
+  )
+}
+
 export default function Home() {
   const router = useRouter()
   const isMobile = useIsMobile()
   const [dmTimeframe, setDmTimeframe] = useState('weekly')
   const [outreachTimeframe, setOutreachTimeframe] = useState('weekly')
 
-  const [dmLeads, setDmLeads]     = useState([])     // source='dm' / Meta IG only
-  const [formLeads, setFormLeads] = useState([])     // source='form' / 'import' / etc
-  const [messages, setMessages] = useState([])
-  const [contacts, setContacts] = useState([])      // normalized form leads → GHL-shape
-  const [callLogs, setCallLogs] = useState({})       // keyed by lead_id (uuid)
+  const [dmLeads, setDmLeads]     = useState([])
+  const [formLeads, setFormLeads] = useState([])
+  const [messages, setMessages]   = useState([])
+  const [contacts, setContacts]   = useState([])
+  const [callLogs, setCallLogs]   = useState({})
   const [callLogsList, setCallLogsList] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]     = useState(true)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -602,11 +582,8 @@ export default function Home() {
     try {
       const { data: leadsData } = await supabase.from('leads').select('*')
       const allLeads = leadsData || []
-
-      // Split leads by origin. DM Pipeline only sees Meta/IG conversations.
-      // Outreach Pipeline only sees form-fill leads (and CSV imports).
       const dmOnly   = allLeads.filter(isDmLead)
-      const formOnly = allLeads.filter(isFormLead)
+      const formOnly = allLeads.filter(l => !isDmLead(l))
       setDmLeads(dmOnly)
       setFormLeads(formOnly)
 
@@ -614,7 +591,6 @@ export default function Home() {
         .select('*').order('created_at', { ascending: false })
       setMessages(msgsData || [])
 
-      // Outreach card uses normalized form leads only
       setContacts(formOnly.map(leadToContact))
 
       const { data: logs } = await supabase.from('call_logs')
@@ -623,7 +599,9 @@ export default function Home() {
       logs?.forEach(log => { logsMap[log.lead_id] = log })
       setCallLogs(logsMap)
       setCallLogsList(logs || [])
-    } catch (err) { console.error('Fetch error:', err) }
+    } catch (err) {
+      console.error('[home] fetch error:', err)
+    }
     setLoading(false)
   }
 
@@ -640,7 +618,6 @@ export default function Home() {
     router.push('/inbox')
   }
 
-  // ─── DM stats (Meta/IG leads only) ──────────────────────────────────
   const dmStart = currentRangeStart(dmTimeframe)
   const dmLeadsInRange = dmLeads.filter(l => new Date(l.created_at) >= dmStart)
 
@@ -676,11 +653,10 @@ export default function Home() {
       }).length) },
   ]
 
-  // ─── Awaiting reply (only DM leads with inbound IG messages) ────────
   const dmLeadIds = new Set(dmLeads.map(l => l.id))
   const dmsByLead = {}
   messages.forEach(m => {
-    if (!dmLeadIds.has(m.lead_id)) return  // skip SMS / other channels
+    if (!dmLeadIds.has(m.lead_id)) return
     if (m.channel && m.channel !== 'dm') return
     if (!dmsByLead[m.lead_id] || new Date(m.created_at) > new Date(dmsByLead[m.lead_id].created_at)) {
       dmsByLead[m.lead_id] = m
@@ -697,7 +673,7 @@ export default function Home() {
     .map(l => ({ lead: l, lastMsg: dmsByLead[l.id] }))
     .sort((a, b) => new Date(b.lastMsg.created_at) - new Date(a.lastMsg.created_at))
 
-  function renderDmItem({ lead, lastMsg }, i) {
+  function renderDmItem({ lead, lastMsg }) {
     const avatar = lead.profile_pic_url
     const initial = (lead.name || lead.ig_handle || '?')[0].toUpperCase()
     return (
@@ -754,12 +730,10 @@ export default function Home() {
     )
   }
 
-  // ─── Outreach stats (form-fill leads only) ──────────────────────────
   const outreachStart = currentRangeStart(outreachTimeframe)
   const calledTags = ['called once','called twice','called three times','call back','not interested','booked']
   const contactsInRange = contacts.filter(c => new Date(c.dateAdded) >= outreachStart)
 
-  // Only count call_logs that belong to form leads
   const formLeadIds = new Set(formLeads.map(l => l.id))
   const formCallLogs = callLogsList.filter(log => formLeadIds.has(log.lead_id))
   const callsInRange = formCallLogs.filter(log => {
@@ -795,8 +769,6 @@ export default function Home() {
       }).length) },
   ]
 
-  // Strongest leads = uncalled/early-tag + bothered ≥4 + age 22-45 + in green call window.
-  // would_invest filter was removed — form fillers self-select for high intent.
   const strongestLeads = contacts
     .filter(c => {
       const tag = callLogs[c.id]?.tag || 'uncalled'
@@ -821,7 +793,7 @@ export default function Home() {
       return a.age - b.age
     })
 
-  function renderLeadItem({ contact, bothered, age, tag }, i) {
+  function renderLeadItem({ contact, bothered, age, tag }) {
     const tagColors = {
       uncalled: BRAND.textMuted,
       'called once': BRAND.statusNew,
@@ -855,9 +827,7 @@ export default function Home() {
             fontSize: 12, color: BRAND.textPrimary, fontWeight: 500,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             fontFamily: FONT_BODY, letterSpacing: '0.02em',
-          }}>
-            {contact.contactName || 'Unknown'}
-          </p>
+          }}>{contact.contactName || 'Unknown'}</p>
           <p style={{
             fontSize: 9, color: BRAND.textMuted, marginTop: 1,
             fontFamily: FONT_BODY, letterSpacing: '0.05em',
@@ -879,17 +849,25 @@ export default function Home() {
 
   return (
     <PageBackground style={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Top-right sign out */}
+
+      <div style={{
+        position: 'absolute',
+        top: isMobile ? 12 : 18,
+        left: isMobile ? 12 : 24,
+        zIndex: 10,
+      }}>
+        <SignOutButton isMobile={isMobile} />
+      </div>
+
       <div style={{
         position: 'absolute',
         top: isMobile ? 12 : 18,
         right: isMobile ? 12 : 24,
         zIndex: 10,
       }}>
-        <SignOutButton isMobile={isMobile} />
+        <ManageTeamButton isMobile={isMobile} />
       </div>
 
-      {/* Hero header */}
       <div style={{
         padding: isMobile ? '18px 16px 14px' : '24px 24px 20px',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -946,7 +924,6 @@ export default function Home() {
             gap: isMobile ? 14 : 24,
           }}>
             <PipelineCard
-              phaseLabel="Phase One — Inbound"
               title="DM Pipeline"
               href="/inbox"
               stats={dmStats}
@@ -962,7 +939,6 @@ export default function Home() {
               emptyText="No DMs awaiting reply"
             />
             <PipelineCard
-              phaseLabel="Phase Two — Outbound"
               title="Outreach Pipeline"
               href="/calls"
               stats={outreachStats}

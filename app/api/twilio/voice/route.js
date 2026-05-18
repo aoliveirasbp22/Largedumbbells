@@ -7,8 +7,10 @@
 // and record the call."
 //
 // Twilio POSTs form-encoded data here. Key fields we use:
-//   - From: the "identity" string from the access token (e.g., "setter")
-//   - To:   the destination phone number, passed from the browser as a param
+//   - From:    the access-token identity, prefixed "client:" by Twilio
+//              (e.g. "client:ad67de18-bd90-4903-bc29-b9933500e728")
+//   - To:      the destination phone number, passed from the browser as a param
+//   - CallSid: Twilio's unique id for this call
 //
 // We pass the destination as a custom parameter from the browser
 // (params.To when calling device.connect()), and Twilio forwards it here.
@@ -21,15 +23,27 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const VoiceResponse = twilio.twiml.VoiceResponse
 
+// Extract the user's UUID from Twilio's "From" field.
+// Twilio sends client identities prefixed with "client:" — strip it and
+// validate the remainder looks like a UUID. Anything else returns null.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function parseCallerUserId(fromField) {
+  if (!fromField) return null
+  const raw = String(fromField).startsWith('client:')
+    ? String(fromField).slice('client:'.length)
+    : String(fromField)
+  return UUID_RE.test(raw) ? raw : null
+}
+
 export async function POST(req) {
   try {
     const formData = await req.formData()
     const params = Object.fromEntries(formData.entries())
 
-    // The "To" param is set by the browser when calling device.connect({ params: { To: '+1...' } })
     const to = params.To
-    const from = process.env.TWILIO_PHONE_NUMBER
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER
     const callSid = params.CallSid
+    const calledBy = parseCallerUserId(params.From)
 
     const twiml = new VoiceResponse()
 
@@ -47,9 +61,7 @@ export async function POST(req) {
       })
     }
 
-    // Log the call attempt to call_logs immediately. The status webhook
-    // will fill in duration, final status, etc. We try to match it to a
-    // lead by phone number (digits-only comparison).
+    // Match the destination number to a lead by phone (digits-only suffix)
     const toDigits = to.replace(/\D/g, '')
     let leadId = null
     try {
@@ -58,7 +70,6 @@ export async function POST(req) {
         .select('id, phone')
         .not('phone', 'is', null)
         .limit(2000)
-      // Match on suffix to be tolerant of country-code prefix differences
       const match = (leads || []).find(l => {
         const leadDigits = (l.phone || '').replace(/\D/g, '')
         if (!leadDigits) return false
@@ -71,15 +82,17 @@ export async function POST(req) {
       console.error('[twilio/voice] lead lookup failed:', err)
     }
 
+    // Insert the initial call_logs row with attribution.
     try {
       await supabaseAdmin.from('call_logs').insert({
         twilio_call_sid: callSid,
         direction:       'outbound',
-        from_number:     from,
+        from_number:     fromNumber,
         to_number:       to,
         status:          'initiated',
         started_at:      new Date().toISOString(),
         lead_id:         leadId,
+        called_by:       calledBy,  // user UUID, or null if not a valid client identity
       })
     } catch (err) {
       // Don't fail the call if logging fails — the call still needs to happen.
@@ -87,12 +100,8 @@ export async function POST(req) {
     }
 
     // Dial the destination from our Twilio number.
-    // - callerId: caller ID shown to the lead (must be a Twilio number we own)
-    // - record: capture audio for later QA / coaching (kept off today per scope)
-    // - timeout: how long to ring before giving up
-    // - answerOnBridge: don't bill the caller until the lead picks up
     const dial = twiml.dial({
-      callerId: from,
+      callerId: fromNumber,
       timeout: 30,
       answerOnBridge: true,
       // record: 'record-from-answer-dual', // enable later when recording ships
@@ -105,7 +114,6 @@ export async function POST(req) {
     })
   } catch (err) {
     console.error('[twilio/voice] fatal:', err)
-    // Always return valid TwiML even on error — Twilio expects XML.
     const twiml = new VoiceResponse()
     twiml.say(
       { voice: 'alice' },

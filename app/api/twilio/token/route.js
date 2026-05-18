@@ -1,80 +1,63 @@
 // POST /api/twilio/token
 //
-// Generates a short-lived (1 hour) Twilio Access Token that grants the
-// browser dialer permission to make outbound voice calls through our
-// TwiML App. The token is signed with our API Key, so we never have to
-// expose the raw Auth Token to the browser.
-//
-// Flow:
-//   1. Browser loads the dialer component on the contact profile page
-//   2. Component calls fetch('/api/twilio/token', { method: 'POST' })
-//   3. This route returns { token, identity }
-//   4. Twilio Voice SDK in the browser uses the token to register a
-//      "device" that can make calls
-//
-// The "identity" is the username Twilio uses to identify this browser
-// client. For now we use a single fixed identity since auth ships
-// tomorrow. Once we have setter accounts, identity = setter user id.
+// Generates a Twilio Voice access token for the browser dialer.
+// The token's identity is set to the LOGGED-IN USER'S UUID, which
+// becomes the From identity Twilio reports on every call this user makes.
+// Voice/status webhooks read that identity back and write it to
+// call_logs.called_by — that's how every call gets attributed.
 
 import { NextResponse } from 'next/server'
 import twilio from 'twilio'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
-const AccessToken = twilio.jwt.AccessToken
-const VoiceGrant  = AccessToken.VoiceGrant
-
-export async function POST(req) {
+export async function POST() {
   try {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID
-    const apiKeySid  = process.env.TWILIO_API_KEY_SID
-    const apiKeySecret = process.env.TWILIO_API_KEY_SECRET
-    const twimlAppSid = process.env.TWILIO_TWIML_APP_SID
+    const cookieStore = await cookies()
 
-    if (!accountSid || !apiKeySid || !apiKeySecret || !twimlAppSid) {
-      console.error('[twilio/token] missing env vars', {
-        hasAccountSid: !!accountSid,
-        hasApiKeySid:  !!apiKeySid,
-        hasApiKeySecret: !!apiKeySecret,
-        hasTwimlAppSid: !!twimlAppSid,
-      })
-      return NextResponse.json(
-        { ok: false, reason: 'server_misconfigured' },
-        { status: 500 }
-      )
-    }
-
-    // For now, single fixed identity. Replace with setter user id when auth lands.
-    const identity = 'setter'
-
-    // Create the access token
-    const token = new AccessToken(
-      accountSid,
-      apiKeySid,
-      apiKeySecret,
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       {
-        identity,
-        ttl: 3600, // 1 hour, max is 24h
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll() {},
+        },
       }
     )
 
-    // Grant: the browser can make outbound calls through our TwiML App,
-    // and can receive incoming calls (we don't use this yet, but it costs
-    // nothing to include and saves a code change later).
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ ok: false, reason: 'unauthenticated' }, { status: 401 })
+    }
+
+    // Identity must be alphanumeric + dashes only (no other chars per Twilio rules).
+    // UUIDs satisfy that, so we use the user.id directly.
+    const identity = user.id
+
+    const AccessToken = twilio.jwt.AccessToken
+    const VoiceGrant  = AccessToken.VoiceGrant
+
+    const token = new AccessToken(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_API_KEY_SID,
+      process.env.TWILIO_API_KEY_SECRET,
+      { identity, ttl: 3600 }
+    )
+
     const voiceGrant = new VoiceGrant({
-      outgoingApplicationSid: twimlAppSid,
-      incomingAllow: true,
+      outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
+      incomingAllow: false,
     })
     token.addGrant(voiceGrant)
 
     return NextResponse.json({
-      ok: true,
+      ok:       true,
+      token:    token.toJwt(),
       identity,
-      token: token.toJwt(),
     })
   } catch (err) {
-    console.error('[twilio/token] error:', err)
-    return NextResponse.json(
-      { ok: false, reason: 'token_generation_failed' },
-      { status: 500 }
-    )
+    console.error('[twilio:token] error:', err)
+    return NextResponse.json({ ok: false, reason: 'token_failed', error: String(err) }, { status: 500 })
   }
 }

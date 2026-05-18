@@ -15,6 +15,8 @@
 //   - CallDuration:   total call time in seconds (only on 'completed')
 //   - Timestamp:      ISO timestamp of this status event
 //   - From, To:       the numbers (we already stored these but useful as fallback)
+//                     For browser-initiated calls, From is "client:<UUID>"
+//                     where the UUID is the setter's user.id.
 //   - Direction:      'outbound-api' | 'outbound-dial' | 'inbound'
 //   - Price:          how much the call cost (negative number, in USD by default)
 //   - PriceUnit:      currency code
@@ -24,6 +26,17 @@
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+
+// Strip "client:" prefix from Twilio's From field and validate UUID format.
+// Returns null for non-UUID identities (e.g. inbound calls where From is a phone number).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function parseCallerUserId(fromField) {
+  if (!fromField) return null
+  const raw = String(fromField).startsWith('client:')
+    ? String(fromField).slice('client:'.length)
+    : String(fromField)
+  return UUID_RE.test(raw) ? raw : null
+}
 
 export async function POST(req) {
   try {
@@ -39,6 +52,7 @@ export async function POST(req) {
     const to         = params.To || null
     const direction  = params.Direction || null
     const timestamp  = params.Timestamp || new Date().toISOString()
+    const calledBy   = parseCallerUserId(from)
 
     if (!callSid) {
       console.error('[twilio/status] missing CallSid, params:', params)
@@ -63,7 +77,7 @@ export async function POST(req) {
     // initiated outside our /voice flow), insert a new row.
     const { data: existing, error: selectErr } = await supabaseAdmin
       .from('call_logs')
-      .select('id, lead_id')
+      .select('id, lead_id, called_by')
       .eq('twilio_call_sid', callSid)
       .maybeSingle()
 
@@ -72,6 +86,10 @@ export async function POST(req) {
     }
 
     if (existing) {
+      // Backfill called_by if the existing row doesn't have one and we now know it.
+      if (!existing.called_by && calledBy) {
+        update.called_by = calledBy
+      }
       const { error: updateErr } = await supabaseAdmin
         .from('call_logs')
         .update(update)
@@ -113,6 +131,7 @@ export async function POST(req) {
         price:            update.price ?? null,
         price_unit:       update.price_unit ?? null,
         lead_id:          leadId,
+        called_by:        calledBy,
       })
       if (insertErr) {
         console.error('[twilio/status] insert error:', insertErr)
@@ -124,7 +143,6 @@ export async function POST(req) {
   } catch (err) {
     console.error('[twilio/status] fatal:', err)
     // Return 200 anyway — if we 500, Twilio will retry, which spams logs.
-    // Better to swallow and investigate the root cause.
     return NextResponse.json({ ok: false }, { status: 200 })
   }
 }
