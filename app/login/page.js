@@ -1,6 +1,7 @@
 'use client'
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   Eyebrow, GoldRule, DisplayHeading, PageBackground, BrandButton,
@@ -29,33 +30,40 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const next = searchParams.get('next') || '/'
 
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError]       = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!password || submitting) return
+    if (!email || !password || submitting) return
     setSubmitting(true)
     setError('')
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email:    email.trim(),
+        password,
       })
-      if (res.ok) {
-        // Cookie set by the API; navigate to intended page
-        router.push(next)
-      } else {
-        setError('Incorrect password')
+
+      if (authError || !data?.session) {
+        setError(authError?.message?.includes('Invalid')
+          ? 'Incorrect email or password'
+          : (authError?.message || 'Sign in failed'))
         setPassword('')
+        setSubmitting(false)
+        return
       }
-    } catch {
+
+      // Session cookie is now set by @supabase/ssr.
+      // Hard-navigate (not router.push) so the proxy sees the fresh cookie.
+      window.location.href = next
+    } catch (err) {
+      console.error('[login] error:', err)
       setError('Something went wrong. Try again.')
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   return (
@@ -100,20 +108,46 @@ function LoginForm() {
 
         <form onSubmit={handleSubmit}>
           <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em', marginBottom: 8 }}>
-            Password
+            Email
           </Eyebrow>
           <input
-            type="password"
-            value={password}
-            onChange={e => { setPassword(e.target.value); setError('') }}
+            type="email"
+            value={email}
+            onChange={e => { setEmail(e.target.value); setError('') }}
             autoFocus
+            autoComplete="email"
             style={{
               width: '100%',
               background: BRAND.bgInput,
               color: BRAND.textPrimary,
               border: `1px solid ${error ? BRAND.statusDisqualified : BRAND.border}`,
               padding: '12px 14px',
-              fontSize: 16, // 16px = no iOS auto-zoom
+              fontSize: 16,
+              outline: 'none',
+              fontFamily: FONT_BODY,
+              letterSpacing: '0.02em',
+              transition: 'border-color 0.15s',
+              marginBottom: 18,
+            }}
+            onFocus={e => { if (!error) e.target.style.borderColor = BRAND.borderGoldStrong }}
+            onBlur={e => { if (!error) e.target.style.borderColor = BRAND.border }}
+          />
+
+          <Eyebrow color={BRAND.textMuted} style={{ fontSize: 9, letterSpacing: '0.25em', marginBottom: 8 }}>
+            Password
+          </Eyebrow>
+          <input
+            type="password"
+            value={password}
+            onChange={e => { setPassword(e.target.value); setError('') }}
+            autoComplete="current-password"
+            style={{
+              width: '100%',
+              background: BRAND.bgInput,
+              color: BRAND.textPrimary,
+              border: `1px solid ${error ? BRAND.statusDisqualified : BRAND.border}`,
+              padding: '12px 14px',
+              fontSize: 16,
               outline: 'none',
               fontFamily: FONT_BODY,
               letterSpacing: '0.05em',
@@ -136,11 +170,10 @@ function LoginForm() {
               variant="solid"
               size="md"
               onClick={handleSubmit}
-              disabled={submitting || !password}
+              disabled={submitting || !email || !password}
               style={{ width: '100%' }}>
-              {submitting ? 'Verifying…' : 'Enter →'}
+              {submitting ? 'Signing In…' : 'Enter →'}
             </BrandButton>
-            {/* Hidden submit button so Enter key works inside the form */}
             <button type="submit" style={{ display: 'none' }} aria-hidden="true" />
           </div>
         </form>

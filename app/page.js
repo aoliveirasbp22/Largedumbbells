@@ -72,6 +72,18 @@ function getField(customFields, id) {
   return customFields?.find(f => f.id === id)?.value || null
 }
 
+// Classify a lead row as a DM lead vs a form lead.
+// DM leads come from Meta/Instagram (source='dm' or psid set).
+// Form leads come from the /form intake (source='form' or 'import').
+function isDmLead(l) {
+  if (l.source === 'dm') return true
+  if (l.platform === 'instagram' && l.psid) return true
+  return false
+}
+function isFormLead(l) {
+  return !isDmLead(l)
+}
+
 // Normalize a Supabase leads row into the GHL-shape that the rest of
 // this dashboard expects (contactName, dateAdded, customFields[], etc).
 function leadToContact(l) {
@@ -525,6 +537,50 @@ function timeAgoShort(dateStr) {
   return `${days}d`
 }
 
+// ─── Sign out button ──────────────────────────────────────────────────
+function SignOutButton({ isMobile }) {
+  const [signingOut, setSigningOut] = useState(false)
+  async function handleSignOut() {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch (err) {
+      console.error('[signout] error:', err)
+    }
+    // Hard-navigate so the proxy sees the cleared cookie immediately.
+    window.location.href = '/login'
+  }
+  return (
+    <button
+      onClick={handleSignOut}
+      disabled={signingOut}
+      style={{
+        background: 'transparent',
+        color: BRAND.textMuted,
+        border: `1px solid ${BRAND.border}`,
+        padding: isMobile ? '6px 10px' : '7px 14px',
+        fontSize: 9, fontWeight: 700,
+        letterSpacing: '0.2em', textTransform: 'uppercase',
+        fontFamily: FONT_BODY,
+        cursor: signingOut ? 'not-allowed' : 'pointer',
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => {
+        if (signingOut) return
+        e.currentTarget.style.color = BRAND.gold
+        e.currentTarget.style.borderColor = BRAND.borderGoldStrong
+      }}
+      onMouseLeave={e => {
+        if (signingOut) return
+        e.currentTarget.style.color = BRAND.textMuted
+        e.currentTarget.style.borderColor = BRAND.border
+      }}>
+      {signingOut ? 'Signing Out…' : 'Sign Out'}
+    </button>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────
 export default function Home() {
   const router = useRouter()
@@ -532,9 +588,10 @@ export default function Home() {
   const [dmTimeframe, setDmTimeframe] = useState('weekly')
   const [outreachTimeframe, setOutreachTimeframe] = useState('weekly')
 
-  const [leads, setLeads] = useState([])
+  const [dmLeads, setDmLeads]     = useState([])     // source='dm' / Meta IG only
+  const [formLeads, setFormLeads] = useState([])     // source='form' / 'import' / etc
   const [messages, setMessages] = useState([])
-  const [contacts, setContacts] = useState([])      // normalized leads → GHL-shape
+  const [contacts, setContacts] = useState([])      // normalized form leads → GHL-shape
   const [callLogs, setCallLogs] = useState({})       // keyed by lead_id (uuid)
   const [callLogsList, setCallLogsList] = useState([])
   const [loading, setLoading] = useState(true)
@@ -544,16 +601,21 @@ export default function Home() {
   async function fetchAll() {
     try {
       const { data: leadsData } = await supabase.from('leads').select('*')
-      const leadsList = leadsData || []
-      setLeads(leadsList)
+      const allLeads = leadsData || []
+
+      // Split leads by origin. DM Pipeline only sees Meta/IG conversations.
+      // Outreach Pipeline only sees form-fill leads (and CSV imports).
+      const dmOnly   = allLeads.filter(isDmLead)
+      const formOnly = allLeads.filter(isFormLead)
+      setDmLeads(dmOnly)
+      setFormLeads(formOnly)
 
       const { data: msgsData } = await supabase.from('messages')
         .select('*').order('created_at', { ascending: false })
       setMessages(msgsData || [])
 
-      // Normalize the same leads list into GHL-shape for the Outreach card.
-      // No second query needed — reuse data we already have.
-      setContacts(leadsList.map(leadToContact))
+      // Outreach card uses normalized form leads only
+      setContacts(formOnly.map(leadToContact))
 
       const { data: logs } = await supabase.from('call_logs')
         .select('*').not('lead_id', 'is', null)
@@ -578,9 +640,9 @@ export default function Home() {
     router.push('/inbox')
   }
 
-  // ─── DM stats ───────────────────────────────────────────────────────
+  // ─── DM stats (Meta/IG leads only) ──────────────────────────────────
   const dmStart = currentRangeStart(dmTimeframe)
-  const dmLeadsInRange = leads.filter(l => new Date(l.created_at) >= dmStart)
+  const dmLeadsInRange = dmLeads.filter(l => new Date(l.created_at) >= dmStart)
 
   const dmStats = [
     { label: 'Messages',   value: dmLeadsInRange.length, color: BRAND.gold },
@@ -594,34 +656,37 @@ export default function Home() {
   const dmDetailedLabels = getDetailedLabels(dmTimeframe, dmBuckets)
   const dmSeries = [
     { label: 'Messages', color: BRAND.gold,
-      data: dmBuckets.map(b => leads.filter(l => {
+      data: dmBuckets.map(b => dmLeads.filter(l => {
         const t = new Date(l.created_at); return t >= b.start && t < b.end
       }).length) },
     { label: 'Qualifying', color: BRAND.statusNew,
-      data: dmBuckets.map(b => leads.filter(l => {
+      data: dmBuckets.map(b => dmLeads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && (l.status === 'qualifying' || l.status === 'new')
       }).length) },
     { label: 'Link Sent', color: BRAND.statusLinkSent,
-      data: dmBuckets.map(b => leads.filter(l => {
+      data: dmBuckets.map(b => dmLeads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && l.status === 'link sent'
       }).length) },
     { label: 'Booked', color: BRAND.statusBooked,
-      data: dmBuckets.map(b => leads.filter(l => {
+      data: dmBuckets.map(b => dmLeads.filter(l => {
         const t = new Date(l.created_at)
         return t >= b.start && t < b.end && l.status === 'booked'
       }).length) },
   ]
 
-  // ─── Awaiting reply ─────────────────────────────────────────────────
+  // ─── Awaiting reply (only DM leads with inbound IG messages) ────────
+  const dmLeadIds = new Set(dmLeads.map(l => l.id))
   const dmsByLead = {}
   messages.forEach(m => {
+    if (!dmLeadIds.has(m.lead_id)) return  // skip SMS / other channels
+    if (m.channel && m.channel !== 'dm') return
     if (!dmsByLead[m.lead_id] || new Date(m.created_at) > new Date(dmsByLead[m.lead_id].created_at)) {
       dmsByLead[m.lead_id] = m
     }
   })
-  const awaitingReply = leads
+  const awaitingReply = dmLeads
     .filter(l => {
       const lastMsg = dmsByLead[l.id]
       if (!lastMsg) return false
@@ -689,11 +754,15 @@ export default function Home() {
     )
   }
 
-  // ─── Outreach stats ─────────────────────────────────────────────────
+  // ─── Outreach stats (form-fill leads only) ──────────────────────────
   const outreachStart = currentRangeStart(outreachTimeframe)
   const calledTags = ['called once','called twice','called three times','call back','not interested','booked']
   const contactsInRange = contacts.filter(c => new Date(c.dateAdded) >= outreachStart)
-  const callsInRange = callLogsList.filter(log => {
+
+  // Only count call_logs that belong to form leads
+  const formLeadIds = new Set(formLeads.map(l => l.id))
+  const formCallLogs = callLogsList.filter(log => formLeadIds.has(log.lead_id))
+  const callsInRange = formCallLogs.filter(log => {
     if (!log.last_contacted) return false
     return new Date(log.last_contacted) >= outreachStart
   })
@@ -713,13 +782,13 @@ export default function Home() {
         const t = new Date(c.dateAdded); return t >= b.start && t < b.end
       }).length) },
     { label: 'Called', color: BRAND.statusNew,
-      data: outreachBuckets.map(b => callLogsList.filter(log => {
+      data: outreachBuckets.map(b => formCallLogs.filter(log => {
         if (!log.last_contacted) return false
         const t = new Date(log.last_contacted)
         return t >= b.start && t < b.end && calledTags.includes(log.tag)
       }).length) },
     { label: 'Booked', color: BRAND.statusBooked,
-      data: outreachBuckets.map(b => callLogsList.filter(log => {
+      data: outreachBuckets.map(b => formCallLogs.filter(log => {
         if (!log.last_contacted) return false
         const t = new Date(log.last_contacted)
         return t >= b.start && t < b.end && log.tag === 'booked'
@@ -810,6 +879,16 @@ export default function Home() {
 
   return (
     <PageBackground style={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
+      {/* Top-right sign out */}
+      <div style={{
+        position: 'absolute',
+        top: isMobile ? 12 : 18,
+        right: isMobile ? 12 : 24,
+        zIndex: 10,
+      }}>
+        <SignOutButton isMobile={isMobile} />
+      </div>
+
       {/* Hero header */}
       <div style={{
         padding: isMobile ? '18px 16px 14px' : '24px 24px 20px',
