@@ -1,6 +1,7 @@
 import { Geist, Anton } from "next/font/google";
 import "./globals.css";
 import Footer from "./components/Footer";
+import { DialerProvider } from "@/components/Dialer";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -29,10 +30,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${geist.variable} ${anton.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col" style={{ background: '#0a0a0a' }}>
-        <main className="flex-1 min-w-0 flex flex-col">
-          {children}
-        </main>
-        <Footer />
+        <DialerProvider>
+          <main className="flex-1 min-w-0 flex flex-col">
+            {children}
+          </main>
+          <Footer />
+        </DialerProvider>
       </body>
     </html>
   );

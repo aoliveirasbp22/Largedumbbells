@@ -12,6 +12,7 @@ import {
   formatPhone, phoneHref,
   useIsMobile,
 } from '@/lib/brand'
+import { useDialer } from '@/components/Dialer'
 
 // ─── Country codes ─────────────────────────────────────────────────────
 const COUNTRY_CODES = {
@@ -627,7 +628,7 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
 }
 
 // ─── Mobile contact card ──────────────────────────────────────────────
-function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, contactRef, router }) {
+function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, onCall, contactRef, router }) {
   const struggle   = contact.roadblock || '—'
   const occupation = contact.occupation || '—'
   const bothered   = contact.bothered_score ?? '—'
@@ -750,22 +751,23 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, c
       }}>
         {contact.phone ? (
           <>
-            <a
-              href={`tel:${phoneHref(contact.phone)}`}
-              onClick={e => e.stopPropagation()}
+            <button
+              onClick={e => { e.stopPropagation(); onCall(contact) }}
               style={{
-                flex: 1,
+                flex: 1, textAlign: 'left',
                 fontSize: 12, color: BRAND.gold,
                 fontFamily: FONT_BODY,
                 fontVariantNumeric: 'tabular-nums',
                 letterSpacing: '0.02em',
-                textDecoration: 'none',
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
               }}>
               {formatPhone(contact.phone)}
-            </a>
-            <a
-              href={`tel:${phoneHref(contact.phone)}`}
-              onClick={e => e.stopPropagation()}
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onCall(contact) }}
               style={{
                 padding: '6px 12px',
                 fontSize: 10, fontWeight: 700,
@@ -774,11 +776,11 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, c
                 background: 'rgba(176, 131, 74, 0.13)',
                 border: `1px solid ${BRAND.borderGoldStrong}`,
                 fontFamily: FONT_BODY,
-                textDecoration: 'none',
+                cursor: 'pointer',
                 flexShrink: 0,
               }}>
               Call
-            </a>
+            </button>
           </>
         ) : (
           <span style={{ flex: 1, fontSize: 11, color: BRAND.textDim, fontFamily: FONT_BODY }}>
@@ -874,6 +876,7 @@ function formatCreated(dateStr) {
 export default function Calls() {
   const isMobile = useIsMobile()
   const router = useRouter()
+  const { startCall } = useDialer()
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({}) // keyed by lead id (uuid)
   const [loading, setLoading] = useState(true)
@@ -911,6 +914,24 @@ export default function Calls() {
     Object.values(filters).reduce((acc, arr) => acc + (arr.length > 0 ? 1 : 0), 0) + (search ? 1 : 0)
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    function onTagChanged(e) {
+      const { leadId, tag, last_contacted } = e.detail || {}
+      if (!leadId) return
+      setCallLogs(prev => ({
+        ...prev,
+        [leadId]: {
+          ...prev[leadId],
+          lead_id: leadId,
+          tag,
+          last_contacted,
+        },
+      }))
+    }
+    window.addEventListener('ld:tag-changed', onTagChanged)
+    return () => window.removeEventListener('ld:tag-changed', onTagChanged)
+  }, [])
 
   useEffect(() => {
     try {
@@ -1063,6 +1084,18 @@ export default function Calls() {
       setTimeout(() => setCopiedKey(prev => prev === key ? null : prev), 1400)
     }).catch(() => {})
   }
+
+  // Fire the dialer for a contact
+    function dialContact(contact) {
+        if (!contact?.phone) return
+        const currentTag = callLogs[contact.id]?.tag || 'uncalled'
+        startCall({
+            to:         contact.phone,
+            leadName:   contact.contactName,
+            leadId:     contact.id,
+            currentTag,
+        })
+    }
 
   function needsCall(tag, lastContacted) {
     if (tag === 'uncalled') return true
@@ -1420,6 +1453,7 @@ export default function Calls() {
                       urgent={urgent}
                       onTagChange={updateTag}
                       onDelete={(c) => setDeleteTarget(c)}
+                      onCall={dialContact}
                       router={router}
                     />
                   )
@@ -1641,20 +1675,26 @@ export default function Calls() {
                         <td style={{ padding: '10px 14px', color: BRAND.textSecondary, fontFamily: FONT_BODY, fontVariantNumeric: 'tabular-nums' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {contact.phone ? (
-                              <a href={`tel:${phoneHref(contact.phone)}`}
-                                onClick={e => e.stopPropagation()}
+                              <button
+                                onClick={e => { e.stopPropagation(); dialContact(contact) }}
+                                title="Call via Twilio dialer"
                                 style={{
                                   whiteSpace: 'nowrap',
                                   fontSize: 11,
                                   color: BRAND.gold,
-                                  textDecoration: 'none',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontFamily: FONT_BODY,
+                                  fontVariantNumeric: 'tabular-nums',
                                   borderBottom: '1px dotted transparent',
                                   transition: 'border-color 0.15s',
                                 }}
                                 onMouseEnter={e => { e.currentTarget.style.borderBottomColor = BRAND.gold }}
                                 onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent' }}>
                                 {formatPhone(contact.phone)}
-                              </a>
+                              </button>
                             ) : (
                               <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>—</span>
                             )}
