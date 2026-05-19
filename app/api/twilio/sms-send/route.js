@@ -60,9 +60,8 @@ export async function POST(req) {
       twilioMsg = await client.messages.create({
         from: fromNumber,
         to:   normalizedTo,
-        content: messageBody,
+        body: messageBody,
         // Status callback to update delivery state (optional but useful)
-        statusCallback: `${getOrigin(req)}/api/twilio/sms-status`,
       })
     } catch (err) {
       console.error('[twilio/sms-send] twilio error:', err)
