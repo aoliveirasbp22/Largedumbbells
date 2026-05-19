@@ -65,7 +65,7 @@ export async function POST(req) {
         lead_id:      leadId,
         channel:      'sms',
         direction:    'inbound',
-        body:         messageBody,
+        content:      messageBody,
         external_id:  messageSid,
         from_address: from,
         to_address:   to,

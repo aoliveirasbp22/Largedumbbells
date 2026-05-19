@@ -60,7 +60,7 @@ export async function POST(req) {
       twilioMsg = await client.messages.create({
         from: fromNumber,
         to:   normalizedTo,
-        body: messageBody,
+        content: messageBody,
         // Status callback to update delivery state (optional but useful)
         statusCallback: `${getOrigin(req)}/api/twilio/sms-status`,
       })
@@ -72,7 +72,7 @@ export async function POST(req) {
           lead_id:       leadId,
           channel:       'sms',
           direction:     'outbound',
-          body:          messageBody,
+          content:       messageBody,
           from_address:  fromNumber,
           to_address:    normalizedTo,
           status:        'failed',
@@ -93,7 +93,7 @@ export async function POST(req) {
         lead_id:      leadId,
         channel:      'sms',
         direction:    'outbound',
-        body:         messageBody,
+        content:      messageBody,
         external_id:  twilioMsg.sid,
         from_address: fromNumber,
         to_address:   normalizedTo,
