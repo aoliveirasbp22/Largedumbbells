@@ -78,7 +78,7 @@ async function notifySetter(req, lead) {
   const baseUrl =
     process.env.APP_BASE_URL ||
     `https://${req.headers.get('host') || 'largedumbbells.vercel.app'}`
-  const leadUrl = `${baseUrl}/leads/${lead.id}`
+  const leadUrl = `${baseUrl}/calls/${lead.id}`
 
   const subject = `🔥 New qualified lead: ${lead.name}`
 
