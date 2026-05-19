@@ -2,9 +2,10 @@
 //
 // Receives a submission from the branded /form page, validates fields,
 // rate limits, blocks honeypot bots, and creates a new row in the leads
-// table with source = 'form'. After insert, fires handleTagChange() so the
-// lead auto-enrolls in any campaign whose trigger_tag === 'uncalled' AND
-// (trigger_source IS NULL OR trigger_source === 'form').
+// table with source = 'form'. After insert:
+//   1. Fires handleTagChange() for campaign auto-enrollment
+//   2. Notifies the setter via email if lead qualifies as "hot":
+//      age >= 30, country in US/Canada, bothered_score >= 3
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
@@ -31,6 +32,14 @@ const submissionsByIp = new Map()
 const RATE_LIMIT_MAX     = 5            // max submissions
 const RATE_LIMIT_WINDOW  = 60 * 60 * 1000  // per hour
 
+// Setter notification thresholds — change here if criteria shift
+const SETTER_MIN_AGE         = 30
+const SETTER_MIN_BOTHERED    = 3
+const SETTER_COUNTRIES = new Set([
+  'United States', 'USA', 'US', 'U.S.', 'U.S.A.',
+  'Canada', 'CA',
+])
+
 function getIp(req) {
   return (
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -48,6 +57,104 @@ function isRateLimited(ip) {
   recent.push(now)
   submissionsByIp.set(ip, recent)
   return false
+}
+
+// Returns true if the lead meets the criteria for notifying the setter.
+function isHotLead({ age, country, bothered }) {
+  if (age < SETTER_MIN_AGE) return false
+  if (bothered < SETTER_MIN_BOTHERED) return false
+  if (!SETTER_COUNTRIES.has(country)) return false
+  return true
+}
+
+// Fire-and-forget setter notification. Never throws — logs and moves on.
+async function notifySetter(req, lead) {
+  const setterEmail = process.env.SETTER_EMAIL
+  if (!setterEmail) {
+    console.warn('[form-submit] SETTER_EMAIL not set, skipping notification')
+    return
+  }
+
+  const baseUrl =
+    process.env.APP_BASE_URL ||
+    `https://${req.headers.get('host') || 'largedumbbells.vercel.app'}`
+  const leadUrl = `${baseUrl}/leads/${lead.id}`
+
+  const subject = `🔥 New qualified lead: ${lead.name}`
+
+  const text = [
+    `New qualified lead just came in from the form.`,
+    ``,
+    `Name:      ${lead.name}`,
+    `Age:       ${lead.age}`,
+    `Country:   ${lead.country}`,
+    `Bothered:  ${lead.bothered_score}/5`,
+    `Phone:     +${lead.phone}`,
+    `Email:     ${lead.email}`,
+    `Job:       ${lead.occupation}`,
+    ``,
+    `Struggle:`,
+    lead.roadblock,
+    ``,
+    `Open in CRM: ${leadUrl}`,
+  ].join('\n')
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px">
+      <h2 style="margin:0 0 16px">🔥 New qualified lead</h2>
+      <p style="margin:0 0 20px;color:#555">
+        A hot lead just came in from the form. Reach out before they cool off.
+      </p>
+      <table style="border-collapse:collapse;font-size:14px;line-height:1.6">
+        <tr><td style="padding-right:16px;color:#888">Name</td><td><strong>${escapeHtml(lead.name)}</strong></td></tr>
+        <tr><td style="padding-right:16px;color:#888">Age</td><td>${lead.age}</td></tr>
+        <tr><td style="padding-right:16px;color:#888">Country</td><td>${escapeHtml(lead.country)}</td></tr>
+        <tr><td style="padding-right:16px;color:#888">Bothered</td><td>${lead.bothered_score}/5</td></tr>
+        <tr><td style="padding-right:16px;color:#888">Phone</td><td>+${escapeHtml(lead.phone)}</td></tr>
+        <tr><td style="padding-right:16px;color:#888">Email</td><td>${escapeHtml(lead.email)}</td></tr>
+        <tr><td style="padding-right:16px;color:#888">Job</td><td>${escapeHtml(lead.occupation)}</td></tr>
+      </table>
+      <p style="margin:20px 0 8px;color:#888;font-size:13px">Struggle</p>
+      <p style="margin:0 0 24px;padding:12px;background:#f5f5f5;border-radius:6px;font-size:14px">
+        ${escapeHtml(lead.roadblock)}
+      </p>
+      <a href="${leadUrl}"
+         style="display:inline-block;padding:12px 20px;background:#000;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">
+        Open in CRM →
+      </a>
+    </div>
+  `
+
+  try {
+    const res = await fetch(`${baseUrl}/api/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: setterEmail,
+        subject,
+        text,
+        html,
+        // No leadId on purpose: this is internal staff mail, not marketing.
+        // Skips suppression checks and the unsubscribe footer.
+      }),
+    })
+    if (!res.ok) {
+      const raw = await res.text()
+      console.error('[form-submit] setter notify failed:', res.status, raw)
+    }
+  } catch (err) {
+    console.error('[form-submit] setter notify threw:', err)
+  }
+}
+
+// Minimal HTML escape for values dropped into the email template.
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 export async function POST(req) {
@@ -134,6 +241,7 @@ export async function POST(req) {
 
   // ── Compose insert payload ─────────────────────────────────────────────
   const fullName = `${String(body.first_name).trim()} ${String(body.last_name).trim()}`.trim()
+  const countryStr = String(body.country).trim()
 
   const insertPayload = {
     name:           fullName,
@@ -143,7 +251,7 @@ export async function POST(req) {
     roadblock:      String(body.struggle).trim(),
     bothered_score: bothered,
     occupation:     String(body.occupation).trim(),
-    country:        String(body.country).trim(),
+    country:        countryStr,
     status:         'new',
     source:         'form',
     platform:       null,   // not a Meta lead
@@ -174,6 +282,28 @@ export async function POST(req) {
   } catch (err) {
     console.error('[form-submit] enrollment side effect failed:', err)
     // Continue — lead is already inserted, success response still valid
+  }
+
+  // ── Setter notification: hot leads only ────────────────────────────────
+  // Fire-and-forget. We don't await it for the response because the form
+  // user shouldn't wait on Mailgun — but we DO await with a short timeout
+  // so serverless functions don't terminate before the request completes.
+  if (isHotLead({ age, country: countryStr, bothered })) {
+    try {
+      await notifySetter(req, {
+        id: data.id,
+        name: insertPayload.name,
+        email: insertPayload.email,
+        phone: insertPayload.phone,
+        age,
+        roadblock: insertPayload.roadblock,
+        bothered_score: bothered,
+        occupation: insertPayload.occupation,
+        country: countryStr,
+      })
+    } catch (err) {
+      console.error('[form-submit] setter notify outer threw:', err)
+    }
   }
 
   return NextResponse.json({ ok: true, leadId: data.id })
