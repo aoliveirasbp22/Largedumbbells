@@ -285,6 +285,52 @@ function LocalTimeCell({ phone }) {
   )
 }
 
+// ─── Reusable SMS chat-bubble icon button ──────────────────────────────
+// Used in desktop phone column and mobile card action row.
+function SmsIconButton({ contactId, onClick, size = 'sm' }) {
+  // Sizing knobs so we can re-use this on mobile and desktop.
+  const sz = size === 'md'
+    ? { pad: '6px 10px', icon: 16, border: BRAND.borderGoldStrong, bg: 'rgba(176, 131, 74, 0.13)' }
+    : { pad: '1px 5px',  icon: 12, border: BRAND.border,           bg: 'transparent' }
+
+  return (
+    <button
+      onClick={onClick}
+      title="Send SMS"
+      aria-label="Send SMS"
+      style={{
+        flexShrink: 0,
+        color: size === 'md' ? BRAND.gold : BRAND.textDim,
+        background: sz.bg,
+        border: `1px solid ${sz.border}`,
+        padding: sz.pad,
+        fontSize: sz.icon,
+        lineHeight: 1.4,
+        cursor: 'pointer',
+        fontFamily: FONT_BODY,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => {
+        if (size === 'md') return
+        e.currentTarget.style.color = BRAND.gold
+        e.currentTarget.style.borderColor = BRAND.borderGoldStrong
+      }}
+      onMouseLeave={e => {
+        if (size === 'md') return
+        e.currentTarget.style.color = BRAND.textDim
+        e.currentTarget.style.borderColor = BRAND.border
+      }}>
+      {/* Clean chat-bubble SVG. currentColor inherits from button. */}
+      <svg width={sz.icon} height={sz.icon} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 9.5a2 2 0 0 1-2 2H6l-3.5 2.5V4a2 2 0 0 1 2-2h7.5a2 2 0 0 1 2 2v5.5z" />
+      </svg>
+    </button>
+  )
+}
+
 function ColumnFilter({ open, onClose, options, selected, onToggle, formatLabel, searchable }) {
   const ref = useRef(null)
   const [search, setSearch] = useState('')
@@ -628,7 +674,7 @@ function FilterSheet({ open, onClose, filters, filterOptions, toggleFilterValue,
 }
 
 // ─── Mobile contact card ──────────────────────────────────────────────
-function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, onCall, contactRef, router }) {
+function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, onCall, onSms, contactRef, router }) {
   const struggle   = contact.roadblock || '—'
   const occupation = contact.occupation || '—'
   const bothered   = contact.bothered_score ?? '—'
@@ -781,6 +827,11 @@ function MobileContactCard({ contact, log, urgent, tag, onTagChange, onDelete, o
               }}>
               Call
             </button>
+            <SmsIconButton
+              size="md"
+              contactId={contact.id}
+              onClick={e => { e.stopPropagation(); onSms(contact) }}
+            />
           </>
         ) : (
           <span style={{ flex: 1, fontSize: 11, color: BRAND.textDim, fontFamily: FONT_BODY }}>
@@ -879,6 +930,7 @@ export default function Calls() {
   const { startCall } = useDialer()
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({}) // keyed by lead id (uuid)
+  const [completedCalls, setCompletedCalls] = useState([]) // all completed Twilio calls (flat)
   const [loading, setLoading] = useState(true)
   const [hydrated, setHydrated] = useState(false)
   const [search, setSearch] = useState('')
@@ -1009,6 +1061,14 @@ export default function Calls() {
       const logsMap = {}
       logs?.forEach(log => { logsMap[log.lead_id] = log })
       setCallLogs(logsMap)
+
+      // Answered = completed Twilio calls, counted directly by started_at.
+      // No lead_id routing — that dropped calls with null lead_id (25 → 9 bug).
+      const { data: calls } = await supabase
+        .from('call_logs')
+        .select('status, started_at')
+        .eq('status', 'completed')
+      setCompletedCalls(calls || [])
     } catch (err) {
       console.error(err)
     }
@@ -1097,6 +1157,14 @@ export default function Calls() {
         })
     }
 
+  // Navigate to the lead's profile with SMS card focused.
+  // We persist selectedRow so a back-button trip restores the list position.
+  function smsContact(contact) {
+    if (!contact?.phone) return
+    saveListState(contact.id)
+    router.push(`/calls/${contact.id}?action=sms`)
+  }
+
   function needsCall(tag, lastContacted) {
     if (tag === 'uncalled') return true
     if (['called three times', 'not interested', 'booked'].includes(tag)) return false
@@ -1171,7 +1239,7 @@ export default function Calls() {
     const tag = callLogs[c.id]?.tag || 'uncalled'
     return !needsCall(tag, callLogs[c.id]?.last_contacted)
   }).length
-  const statAnswered = filtered.filter(c => answeredTags.includes(callLogs[c.id]?.tag || 'uncalled')).length
+  const statAnswered = completedCalls.filter(c => c.started_at && new Date(c.started_at) >= startDate).length
   const statBooked = filtered.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
 
   const totalPages = Math.ceil(filtered.length / perPage)
@@ -1181,7 +1249,7 @@ export default function Calls() {
     { label: 'Name', w: '160px', filterKey: null },
     { label: 'Created', w: '160px', filterKey: null },
     { label: 'Source', w: '100px', filterKey: 'source' },
-    { label: 'Phone', w: '150px', filterKey: null },
+    { label: 'Phone', w: '180px', filterKey: null },
     { label: 'Email', w: '200px', filterKey: null },
     { label: 'Biggest Struggle', w: '220px', filterKey: null },
     { label: 'Bothered', w: '90px', filterKey: 'bothered' },
@@ -1251,11 +1319,18 @@ export default function Calls() {
           </Link>
         }
         rightSlot={
-          <Link href="/email-automation" style={{ textDecoration: 'none' }}>
-            <BrandButton variant="solid" size="sm">
-              {isMobile ? 'Email →' : 'Email Automation →'}
-            </BrandButton>
-          </Link>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link href="/stats" style={{ textDecoration: 'none' }}>
+              <BrandButton variant="ghost" size="sm">
+                {isMobile ? 'Stats' : 'Stats →'}
+              </BrandButton>
+            </Link>
+            <Link href="/email-automation" style={{ textDecoration: 'none' }}>
+              <BrandButton variant="solid" size="sm">
+                {isMobile ? 'Email →' : 'Email Automation →'}
+              </BrandButton>
+            </Link>
+          </div>
         }
       />
 
@@ -1454,6 +1529,7 @@ export default function Calls() {
                       onTagChange={updateTag}
                       onDelete={(c) => setDeleteTarget(c)}
                       onCall={dialContact}
+                      onSms={smsContact}
                       router={router}
                     />
                   )
@@ -1535,7 +1611,7 @@ export default function Calls() {
           <>
             {/* Desktop table */}
             <div style={{ overflow: 'auto', border: `1px solid ${BRAND.border}` }}>
-              <table style={{ minWidth: 1920, width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+              <table style={{ minWidth: 1950, width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: BRAND.bgCard, borderBottom: `1px solid ${BRAND.border}` }}>
                     {TABLE_COLS.map((h, idx) => {
@@ -1699,34 +1775,41 @@ export default function Calls() {
                               <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>—</span>
                             )}
                             {contact.phone && (
-                              <div style={{ position: 'relative', display: 'inline-flex' }}>
-                                <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.phone, `phone-${contact.id}`) }}
-                                  title="Copy phone"
-                                  style={{
-                                    flexShrink: 0, color: BRAND.textDim,
-                                    background: 'transparent',
-                                    border: `1px solid ${BRAND.border}`,
-                                    padding: '1px 5px', fontSize: 10, lineHeight: 1.4, cursor: 'pointer',
-                                    fontFamily: FONT_BODY,
-                                  }}
-                                  onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold; e.currentTarget.style.borderColor = BRAND.borderGoldStrong }}
-                                  onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
-                                  ⎘
-                                </button>
-                                {copiedKey === `phone-${contact.id}` && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    bottom: 'calc(100% + 4px)', left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    background: BRAND.gold, color: '#000',
-                                    padding: '3px 8px', fontSize: 9, fontWeight: 700,
-                                    letterSpacing: '0.15em', textTransform: 'uppercase',
-                                    fontFamily: FONT_BODY, whiteSpace: 'nowrap',
-                                    pointerEvents: 'none', zIndex: 20,
-                                    boxShadow: `0 0 12px ${BRAND.goldGlow}`,
-                                  }}>Copied</span>
-                                )}
-                              </div>
+                              <>
+                                <SmsIconButton
+                                  size="sm"
+                                  contactId={contact.id}
+                                  onClick={e => { e.stopPropagation(); smsContact(contact) }}
+                                />
+                                <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                  <button onClick={e => { e.stopPropagation(); copyToClipboard(contact.phone, `phone-${contact.id}`) }}
+                                    title="Copy phone"
+                                    style={{
+                                      flexShrink: 0, color: BRAND.textDim,
+                                      background: 'transparent',
+                                      border: `1px solid ${BRAND.border}`,
+                                      padding: '1px 5px', fontSize: 10, lineHeight: 1.4, cursor: 'pointer',
+                                      fontFamily: FONT_BODY,
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.color = BRAND.gold; e.currentTarget.style.borderColor = BRAND.borderGoldStrong }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = BRAND.textDim; e.currentTarget.style.borderColor = BRAND.border }}>
+                                    ⎘
+                                  </button>
+                                  {copiedKey === `phone-${contact.id}` && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      bottom: 'calc(100% + 4px)', left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      background: BRAND.gold, color: '#000',
+                                      padding: '3px 8px', fontSize: 9, fontWeight: 700,
+                                      letterSpacing: '0.15em', textTransform: 'uppercase',
+                                      fontFamily: FONT_BODY, whiteSpace: 'nowrap',
+                                      pointerEvents: 'none', zIndex: 20,
+                                      boxShadow: `0 0 12px ${BRAND.goldGlow}`,
+                                    }}>Copied</span>
+                                  )}
+                                </div>
+                              </>
                             )}
                           </div>
                         </td>

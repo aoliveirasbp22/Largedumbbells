@@ -3,7 +3,8 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { handleTagChange } from '@/lib/enrollments'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import {
   BRAND, FONT_BODY, FONT_DISPLAY,
   TAG_COLORS,
@@ -120,9 +121,9 @@ function FieldRow({ label, value, displayValue, copyable, actionHref }) {
   )
 }
 
-function SectionCard({ children, title, style = {} }) {
+function SectionCard({ children, title, style = {}, idAttr = null }) {
   return (
-    <div style={{
+    <div id={idAttr} style={{
       position: 'relative',
       background: BRAND.bgCard,
       border: `1px solid ${BRAND.border}`,
@@ -150,10 +151,193 @@ function SectionCard({ children, title, style = {} }) {
   )
 }
 
-export default function ContactProfile() {
+// SMS character limit per segment (GSM-7). Twilio bills per segment.
+// 160 single-segment, 153/segment for multi-part. We just warn at 160.
+const SMS_SOFT_LIMIT = 160
+
+function SmsSendBox({ leadId, phone, firstName, isMobile, autoFocus }) {
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState(null)
+  const textareaRef = useRef(null)
+
+  // Seed a starter template on first render.
+  useEffect(() => {
+    const first = (firstName || '').trim()
+    if (first) {
+      setDraft(`Hey ${first}, this is Kyle from Large Dumbbells — got a sec?`)
+    } else {
+      setDraft(`Hey, this is Kyle from Large Dumbbells — got a sec?`)
+    }
+  }, [firstName])
+
+  // Auto-focus + scroll when ?action=sms is in the URL.
+  useEffect(() => {
+    if (!autoFocus) return
+    const el = textareaRef.current
+    if (!el) return
+    // Wait one frame to make sure the card is in the DOM and laid out.
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Slight delay so the scroll completes before focus jumps view
+      setTimeout(() => el.focus(), 350)
+    })
+  }, [autoFocus])
+
+  async function handleSend() {
+    setError(null)
+    setSent(false)
+
+    if (!draft.trim()) {
+      setError('Type a message first.')
+      return
+    }
+    if (!phone) {
+      setError('This lead has no phone number.')
+      return
+    }
+
+    setSending(true)
+    try {
+      const res = await fetch('/api/twilio/sms-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId,
+          to: phone,
+          body: draft.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        setError(data.reason || data.error || 'Send failed')
+      } else {
+        setSent(true)
+        setDraft('')
+        // Auto-clear the "Sent" badge after 4s so subsequent sends feel fresh
+        setTimeout(() => setSent(false), 4000)
+      }
+    } catch (err) {
+      setError(String(err?.message || err))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const charCount = draft.length
+  const overLimit = charCount > SMS_SOFT_LIMIT
+
+  return (
+    <SectionCard title="Send SMS" idAttr="sms-section">
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        {/* Destination row */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 11, color: BRAND.textMuted,
+          fontFamily: FONT_BODY,
+          letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600,
+        }}>
+          <span>To</span>
+          <span style={{ color: phone ? BRAND.textPrimary : BRAND.statusDisqualified, letterSpacing: '0.01em', textTransform: 'none', fontWeight: 500 }}>
+            {phone ? formatPhone(phone) : 'No phone on file'}
+          </span>
+        </div>
+
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          disabled={sending || !phone}
+          placeholder="Type your message…"
+          rows={4}
+          style={{
+            width: '100%',
+            background: BRAND.bgInput,
+            color: BRAND.textPrimary,
+            border: `1px solid ${overLimit ? BRAND.statusQualifying : BRAND.border}`,
+            padding: '12px 14px',
+            fontSize: 13,
+            resize: 'vertical',
+            outline: 'none',
+            lineHeight: 1.6,
+            fontFamily: FONT_BODY,
+            letterSpacing: '0.01em',
+            transition: 'border-color 0.15s',
+          }}
+          onFocus={e => { if (!overLimit) e.target.style.borderColor = BRAND.borderGoldStrong }}
+          onBlur={e => { if (!overLimit) e.target.style.borderColor = BRAND.border }}
+        />
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 600,
+            letterSpacing: '0.15em', textTransform: 'uppercase',
+            fontFamily: FONT_BODY,
+            color: overLimit ? BRAND.statusQualifying : BRAND.textDim,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {charCount}/{SMS_SOFT_LIMIT}{overLimit && ' · Multi-segment'}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {sent && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.2em', textTransform: 'uppercase',
+                fontFamily: FONT_BODY,
+                color: BRAND.statusBooked,
+              }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: 999,
+                  background: BRAND.statusBooked,
+                  boxShadow: `0 0 6px ${BRAND.statusBooked}99`,
+                }} />
+                Sent
+              </span>
+            )}
+            {error && (
+              <span style={{
+                fontSize: 11,
+                color: BRAND.statusDisqualified,
+                fontFamily: FONT_BODY,
+                maxWidth: 280,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+              title={error}>
+                {error}
+              </span>
+            )}
+            <BrandButton
+              variant="primary"
+              size="md"
+              onClick={handleSend}
+              disabled={sending || !phone || !draft.trim()}>
+              {sending ? 'Sending…' : 'Send SMS'}
+            </BrandButton>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  )
+}
+
+function ContactProfileInner() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const contactId = params.id ?? params.contactId
   const isMobile = useIsMobile()
+  const autoFocusSms = searchParams?.get('action') === 'sms'
 
   const [contact, setContact] = useState(null)
   const [callLog, setCallLog] = useState(null)
@@ -465,6 +649,17 @@ export default function ContactProfile() {
           </div>
         </SectionCard>
 
+        {/* SMS Send box */}
+        <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+          <SmsSendBox
+            leadId={contact.id}
+            phone={phone}
+            firstName={firstName}
+            isMobile={isMobile}
+            autoFocus={autoFocusSms}
+          />
+        </div>
+
         {/* Two-column grid: Contact + Survey */}
         <div style={{
           display: 'grid',
@@ -521,5 +716,18 @@ export default function ContactProfile() {
 
       </div>
     </PageBackground>
+  )
+}
+
+// Suspense wrapper required for useSearchParams in Next.js 16.
+export default function ContactProfile() {
+  return (
+    <Suspense fallback={
+      <PageBackground style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Eyebrow color={BRAND.textDim}>Loading…</Eyebrow>
+      </PageBackground>
+    }>
+      <ContactProfileInner />
+    </Suspense>
   )
 }
