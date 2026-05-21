@@ -930,7 +930,7 @@ export default function Calls() {
   const { startCall } = useDialer()
   const [contacts, setContacts] = useState([])
   const [callLogs, setCallLogs] = useState({}) // keyed by lead id (uuid)
-  const [completedCalls, setCompletedCalls] = useState([]) // all completed Twilio calls (flat)
+  const [allCalls, setAllCalls] = useState([]) // all Twilio calls (flat)
   const [loading, setLoading] = useState(true)
   const [hydrated, setHydrated] = useState(false)
   const [search, setSearch] = useState('')
@@ -1062,13 +1062,12 @@ export default function Calls() {
       logs?.forEach(log => { logsMap[log.lead_id] = log })
       setCallLogs(logsMap)
 
-      // Answered = completed Twilio calls, counted directly by started_at.
-      // No lead_id routing — that dropped calls with null lead_id (25 → 9 bug).
+      // All real Twilio calls. Called/Answered = by started_at; Booked = by last_contacted.
       const { data: calls } = await supabase
         .from('call_logs')
-        .select('status, started_at')
-        .eq('status', 'completed')
-      setCompletedCalls(calls || [])
+        .select('status, started_at, tag, last_contacted')
+        .not('twilio_call_sid', 'is', null)
+      setAllCalls(calls || [])
     } catch (err) {
       console.error(err)
     }
@@ -1235,12 +1234,10 @@ export default function Calls() {
     })
 
   const statTotal = filtered.length
-  const statCalled = filtered.filter(c => {
-    const tag = callLogs[c.id]?.tag || 'uncalled'
-    return !needsCall(tag, callLogs[c.id]?.last_contacted)
-  }).length
-  const statAnswered = completedCalls.filter(c => c.started_at && new Date(c.started_at) >= startDate).length
-  const statBooked = filtered.filter(c => (callLogs[c.id]?.tag || 'uncalled') === 'booked').length
+  const callsInTimeframe = allCalls.filter(c => c.started_at && new Date(c.started_at) >= startDate)
+  const statCalled = callsInTimeframe.length
+  const statAnswered = callsInTimeframe.filter(c => c.status === 'completed').length
+  const statBooked = allCalls.filter(c => c.tag === 'booked' && c.last_contacted && new Date(c.last_contacted) >= startDate).length
 
   const totalPages = Math.ceil(filtered.length / perPage)
   const paginated = filtered.slice((page - 1) * perPage, page * perPage)
