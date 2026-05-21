@@ -1179,11 +1179,26 @@ export default function Calls() {
   const answeredTags = ['call back','not interested','booked']
 
   const now = new Date()
+  // "Daily" = the current calling day in US Eastern, where the setters work.
+  // Using the browser's local day would shift the boundary for operators in
+  // other timezones and sweep in the prior evening's calls.
   const getStartDate = () => {
-    const d = new Date(now)
-    if (timeframe === 'daily')   { d.setHours(0,0,0,0); return d }
-    if (timeframe === 'weekly')  { d.setDate(d.getDate() - 7); return d }
-    if (timeframe === 'monthly') { d.setDate(d.getDate() - 30); return d }
+    if (timeframe === 'weekly')  { const d = new Date(now); d.setDate(d.getDate() - 7); return d }
+    if (timeframe === 'monthly') { const d = new Date(now); d.setDate(d.getDate() - 30); return d }
+    if (timeframe === 'daily') {
+      // Today's calendar date as it reads in Eastern, e.g. "2026-05-21".
+      const etDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(now)
+      // Eastern's UTC offset right now (handles EST/EDT automatically).
+      const etOffset = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', timeZoneName: 'longOffset',
+      }).formatToParts(now).find(p => p.type === 'timeZoneName')?.value || 'GMT-05:00'
+      const sign = etOffset.includes('-') ? '-' : '+'
+      const hh = (etOffset.match(/(\d{2}):/)?.[1]) || '05'
+      // Midnight Eastern expressed as an ISO instant, e.g. 2026-05-21T00:00:00-04:00
+      return new Date(`${etDate}T00:00:00${sign}${hh}:00`)
+    }
     return new Date(0)
   }
   const startDate = getStartDate()
